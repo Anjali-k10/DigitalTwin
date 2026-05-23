@@ -1,0 +1,141 @@
+import { useState } from 'react';
+import { NavLink } from 'react-router-dom';
+import DigitalTwinLogo from './DigitalTwinLogo';
+
+const navItems = [
+  { label: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+  { label: 'Health', href: '/health', icon: HeartIcon },
+  { label: 'Finance', href: '/finance', icon: WalletIcon },
+  { label: 'Career', href: '/career', icon: BriefIcon },
+  { label: 'Intelligence', href: '/intelligence', icon: SparkIcon },
+  { label: 'Simulation', href: '/simulation', icon: BranchIcon },
+  { label: 'AI Copilot', href: '/copilot', icon: ChatIcon },
+  { label: 'Notifications', href: '/notifications', icon: BellIcon },
+];
+
+const settingsItem = { label: 'Settings', href: '/settings', icon: SettingsIcon };
+
+function Sidebar() {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  return (
+    <aside
+      className={`hidden h-screen shrink-0 border-r border-[#d8e5ea] bg-[#fbfdfe] px-4 py-6 transition-[width] duration-300 lg:block ${
+        isCollapsed ? 'w-20' : 'w-68'
+      }`}
+    >
+      <div className="flex h-full flex-col">
+      <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'justify-between gap-3'}`}>
+        <NavLink to="/dashboard" className="flex min-w-0 items-center gap-3">
+          <DigitalTwinLogo className="h-11 w-11 rounded-lg border border-[#d8e5ea] shadow-lg shadow-[#b8d1da]/60" />
+          {!isCollapsed && (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-zinc-950">DigitalTwin</p>
+            </div>
+          )}
+        </NavLink>
+
+        {!isCollapsed && (
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(true)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#c8dbe2] text-[#4e6670] transition hover:bg-[#f3f8fa]"
+            aria-label="Collapse sidebar"
+          >
+            <ChevronLeftIcon className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {isCollapsed && (
+        <button
+          type="button"
+          onClick={() => setIsCollapsed(false)}
+          className="mx-auto mt-4 flex h-9 w-9 items-center justify-center rounded-lg border border-[#c8dbe2] text-[#4e6670] transition hover:bg-[#f3f8fa]"
+          aria-label="Expand sidebar"
+        >
+          <ChevronRightIcon className="h-4 w-4" />
+        </button>
+      )}
+
+      <nav className="mt-9 space-y-1">
+        {navItems.map((item) => (
+          <SidebarNavItem key={item.label} item={item} isCollapsed={isCollapsed} />
+        ))}
+      </nav>
+      <nav className="mt-auto border-t border-[#d8e5ea] pt-4">
+        <SidebarNavItem item={settingsItem} isCollapsed={isCollapsed} />
+      </nav>
+      </div>
+    </aside>
+  );
+}
+
+function SidebarNavItem({ item, isCollapsed }) {
+  const Icon = item.icon;
+
+  return (
+    <NavLink
+      to={item.href}
+      title={isCollapsed ? item.label : undefined}
+      className={({ isActive }) =>
+        `flex items-center rounded-lg py-2.5 text-sm font-semibold transition ${
+          isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'
+        } ${
+          isActive
+            ? 'bg-[#e6f1f4] text-[#2f5362] shadow-sm'
+            : 'text-[#4e6670] hover:bg-[#f3f8fa] hover:text-[#2f5362]'
+        }`
+      }
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      {!isCollapsed && <span>{item.label}</span>}
+    </NavLink>
+  );
+}
+
+function HomeIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1v-9.5Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>;
+}
+
+function HeartIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M12 20s-7-4.4-9-9.2C1.4 7 3.8 4 7.1 4c1.9 0 3.4 1 4.2 2.3C12.1 5 13.6 4 15.5 4 18.8 4 21.2 7 19.6 10.8 17.7 15.6 12 20 12 20Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>;
+}
+
+function WalletIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19v14H6.5A2.5 2.5 0 0 1 4 16.5v-9Z" stroke="currentColor" strokeWidth="2" /><path d="M16 12h4v4h-4a2 2 0 0 1 0-4Z" stroke="currentColor" strokeWidth="2" /></svg>;
+}
+
+function BriefIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M9 7V5h6v2m-9 3h12m-14 0h18v10H4V10Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>;
+}
+
+function SparkIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>;
+}
+
+function BranchIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M6 6h7a5 5 0 0 1 5 5v7m0 0-3-3m3 3 3-3M6 18h4a4 4 0 0 0 4-4V6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+function ChatIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M5 18.5V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9l-4 2.5Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>;
+}
+
+function BellIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M18 9a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+function SettingsIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" stroke="currentColor" strokeWidth="2" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.8-1L14.4 3h-4l-.4 3.1a7 7 0 0 0-1.8 1l-2.4-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1a7 7 0 0 0 1.8 1l.4 3.1h4l.4-3.1a7 7 0 0 0 1.8-1l2.4 1 2-3.4-2-1.5c.1-.3.1-.7.1-1Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>;
+}
+
+function ChevronLeftIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="m15 18-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+function ChevronRightIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="m9 18 6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+export default Sidebar;

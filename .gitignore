@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Python environments
+venv/
+.venv/
+env/
+ai-engine/venv/
+ai-engine/.venv/
+
+# Build output
+dist/
+build/
+client/dist/
+server/dist/
+ai-engine/dist/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+client/.env
+client/.env.*
+server/.env
+server/.env.*
+ai-engine/.env
+ai-engine/.env.*
+!client/.env.example
+!server/.env.example
+!ai-engine/.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Python cache/test output
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+htmlcov/
+.coverage
+*.pkl
+*.joblib
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
