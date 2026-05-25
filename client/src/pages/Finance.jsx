@@ -44,11 +44,11 @@ function Finance() {
     <div className="min-h-full bg-[#fbf9f8] px-5 py-6 text-[#1b1c1c] sm:px-6 lg:px-8">
       <section className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#5f8fa0]/75">
+          {/* <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#5f8fa0]/75">
             <span>Finance</span>
             <span>/</span>
             <span className="text-[#416f82]">Intelligence</span>
-          </div>
+          </div> */}
           <h1 className="text-4xl font-semibold tracking-tight text-[#1b1c1c]">Finance Intelligence</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#596467]">
             Spending behavior, savings rhythm, stress purchases, and future financial trajectory.

@@ -2,9 +2,9 @@ import { useLocation } from 'react-router-dom';
 
 const pageTitles = {
   '/dashboard': 'Your Digital Twin dashboard',
-  '/health': 'Health signals',
-  '/finance': 'Financial patterns',
-  '/career': 'Career',
+  '/health': ' ',
+  '/finance': ' ',
+  '/career': ' ',
   '/intelligence': 'Cross-domain intelligence',
   '/simulation': 'Scenario simulation',
   '/copilot': 'Twin Copilot',
