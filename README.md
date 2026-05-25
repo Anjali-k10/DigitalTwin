@@ -1,7 +1,7 @@
-LifeTwin — AI Powered Digital Twin Platform
+DigitalTwin — AI Powered Digital Twin Platform
 🚀 Overview
 
-LifeTwin is an AI-powered Digital Twin platform designed to help users optimize their life holistically across:
+DigitalTwin is an AI-powered Digital Twin platform designed to help users optimize their life holistically across:
 
 Health
 Finance
@@ -78,7 +78,7 @@ are securely stored and protected.
 
 🧬 AI-Powered Digital Twin
 
-LifeTwin creates:
+DigtialTwin creates:
 
 a behavioral profile
 adaptive life model
@@ -147,7 +147,7 @@ Example:
 
 💰 Financial Wellness Intelligence
 
-LifeTwin analyzes:
+DigitalTwin analyzes:
 
 income vs expenditure
 savings rate
@@ -202,7 +202,7 @@ Examples:
 “Exercise consistency is improving productivity stability.”
 🔮 Simulation & What-If Intelligence
 
-LifeTwin includes:
+DigitalTwin includes:
 
 behavioral simulations
 future projections
@@ -228,7 +228,7 @@ Example:
 
 🤖 AI Recommendation Engine
 
-LifeTwin generates:
+DigitalTwin generates:
 
 adaptive recommendations
 wellness actions
@@ -283,7 +283,7 @@ insight severity
 adaptive visual states
 🌐 Real-World Integrations
 
-LifeTwin integrates with:
+DigitalTwin integrates with:
 
 GitHub
 LeetCode
@@ -408,7 +408,7 @@ AI-generated projections
 Life balance analysis
 🎯 Goal & Streak System
 
-LifeTwin uses:
+DigitalTwin uses:
 
 action-based consistency streaks.
 
@@ -580,7 +580,7 @@ Correlation Analysis
 POST /api/analyze/correlation
 🎨 UI/UX Philosophy
 
-LifeTwin focuses on:
+DigitalTwin focuses on:
 
 premium SaaS aesthetics
 emotionally aware UI
