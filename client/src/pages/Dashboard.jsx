@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import aiInsightBulb from '../assets/ai-insight-bulb.png';
 
@@ -16,12 +17,14 @@ const fallbackProfile = {
     banking: { status: 'skipped', profileLink: '' },
   },
   lifestyle: {
+    gender: '',
     sleepHours: 6,
     studyHours: 5,
     exerciseFrequency: 2,
     spendingStyle: 'balanced',
     smokingHabits: 'no',
     periodTracking: 'not_now',
+    genderSpecificHealthContext: 'not_now',
   },
   financialPatterns: {
     monthlyIncome: '52000',
@@ -32,6 +35,7 @@ const fallbackProfile = {
 };
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState(() => getStoredDashboardData());
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
   const user = getStoredUser();
@@ -70,7 +74,7 @@ function Dashboard() {
   return (
     <div className="flex h-screen min-w-0 flex-1 overflow-hidden bg-[#fbf9f8] text-[#1b1c1c]">
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <DashboardHeader today={today} firstName={firstName} />
+        <DashboardHeader today={today} firstName={firstName} onSearchClick={() => navigate('/copilot')} />
 
         <main className="dashboard-scrollbar flex-1 overflow-y-auto px-6 py-6 lg:px-8">
           <section className="mb-6 animate-[fadeIn_280ms_ease-out]">
@@ -88,8 +92,8 @@ function Dashboard() {
           </section>
 
           <section className="grid grid-cols-12 gap-6">
-            <HealthScoreCard insights={insights} />
-            <FinanceTrajectory insights={insights} />
+            <HealthScoreCard insights={insights} onOpen={() => navigate('/health')} />
+            <FinanceTrajectory insights={insights} onOpen={() => navigate('/finance')} />
             <LifeBalance insights={insights} />
             <DailyRituals insights={insights} />
             <AdaptiveRecommendations insights={insights} />
@@ -102,7 +106,7 @@ function Dashboard() {
   );
 }
 
-function DashboardHeader({ today, firstName }) {
+function DashboardHeader({ today, firstName, onSearchClick }) {
   return (
     <header className="flex h-20 shrink-0 items-center justify-between border-b border-[#dbe2df]/80 bg-[#fbf9f8]/80 px-6 backdrop-blur-xl lg:px-8">
       <div className="max-w-xl flex-1">
@@ -111,6 +115,9 @@ function DashboardHeader({ today, firstName }) {
           <input
             type="text"
             placeholder="Ask DigitalTwin AI"
+            onClick={onSearchClick}
+            onFocus={onSearchClick}
+            readOnly
             className="w-full rounded-2xl border-0 bg-[#f0eded] py-2.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-[#8b9490] focus:bg-white focus:ring-2 focus:ring-[#8db9c5]/30"
           />
         </label>
@@ -136,7 +143,7 @@ function DashboardHeader({ today, firstName }) {
   );
 }
 
-function HealthScoreCard({ insights }) {
+function HealthScoreCard({ insights, onOpen }) {
   const [displayedScore, setDisplayedScore] = useState(insights.healthScore);
   const [ringReplayKey, setRingReplayKey] = useState(0);
   const radius = 45;
@@ -170,8 +177,22 @@ function HealthScoreCard({ insights }) {
     requestAnimationFrame(tick);
   };
 
+  const openFromKeyboard = (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onOpen();
+    }
+  };
+
   return (
-    <article className={`dashboard-card-enter col-span-12 flex flex-col rounded-2xl border bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.035)] transition hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(0,0,0,0.06)] xl:col-span-4 ${healthStyle.card}`}>
+    <article
+      className={`dashboard-card-enter col-span-12 flex cursor-pointer flex-col rounded-2xl border bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.035)] transition hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(0,0,0,0.06)] focus:outline-none focus:ring-4 focus:ring-[#d7e9ef] xl:col-span-4 ${healthStyle.card}`}
+      onClick={onOpen}
+      onKeyDown={openFromKeyboard}
+      role="button"
+      tabIndex={0}
+      aria-label="Open health page"
+    >
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">Health Score</h3>
@@ -221,13 +242,27 @@ function HealthScoreCard({ insights }) {
   );
 }
 
-function FinanceTrajectory({ insights }) {
+function FinanceTrajectory({ insights, onOpen }) {
   const [selectedRange, setSelectedRange] = useState('1M');
   const activeChart = insights.financeRanges[selectedRange];
   const financeStyle = getVisualState(insights.thresholds.financial.colorState);
 
+  const openFromKeyboard = (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onOpen();
+    }
+  };
+
   return (
-    <article className={`dashboard-card-enter col-span-12 rounded-2xl border bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.035)] transition hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(0,0,0,0.06)] xl:col-span-8 ${financeStyle.card}`}>
+    <article
+      className={`dashboard-card-enter col-span-12 cursor-pointer rounded-2xl border bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.035)] transition hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(0,0,0,0.06)] focus:outline-none focus:ring-4 focus:ring-[#d7e9ef] xl:col-span-8 ${financeStyle.card}`}
+      onClick={onOpen}
+      onKeyDown={openFromKeyboard}
+      role="button"
+      tabIndex={0}
+      aria-label="Open finance page"
+    >
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">Financial Trajectory</h3>
@@ -237,7 +272,10 @@ function FinanceTrajectory({ insights }) {
           {['1W', '1M'].map((range) => (
             <button
               key={range}
-              onClick={() => setSelectedRange(range)}
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedRange(range);
+              }}
               className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase transition ${
                 selectedRange === range
                   ? 'bg-[#1b1c1c] text-white'
@@ -649,12 +687,14 @@ function normalizeProfile(rawProfile) {
       banking: { status: rawProfile.bankingProfile ? 'connected' : 'skipped', profileLink: rawProfile.bankingProfile || '' },
     },
     lifestyle: {
+      gender: rawProfile.gender || '',
       sleepHours: rawProfile.sleepHours ?? 7,
       studyHours: rawProfile.studyHours ?? 4,
       exerciseFrequency: rawProfile.exerciseFrequency ?? 2,
       spendingStyle: rawProfile.spendingStyle || 'balanced',
       smokingHabits: rawProfile.smokingHabit || 'no',
       periodTracking: rawProfile.periodTracking || 'not_now',
+      genderSpecificHealthContext: rawProfile.genderSpecificHealthContext || 'not_now',
     },
     financialPatterns: {
       monthlyIncome: rawProfile.monthlyIncome ?? 0,
@@ -686,10 +726,14 @@ function buildInsights(profile, dashboardData = null) {
   const hasGithub = profile.integrations?.github?.status === 'connected';
   const hasLeetcode = profile.integrations?.leetcode?.status === 'connected';
   const smokingHabit = profile.lifestyle.smokingHabits || 'no';
+  const gender = profile.lifestyle.gender || '';
+  const genderThresholds = getGenderThresholds(gender);
+  const periodRecoveryLoad = gender === 'female' && profile.lifestyle.periodTracking === 'irregular' ? 5 : 0;
+  const maleRecoveryCredit = gender === 'male' && profile.lifestyle.genderSpecificHealthContext !== 'not_now' && exerciseFrequency >= 3 ? 3 : 0;
 
-  const calculatedBurnout = clamp(Math.round(42 + Math.max(0, 7 - sleepHours) * 8 + Math.max(0, studyHours - 5) * 5 + stressLevel * 2 - exerciseFrequency * 3 + (smokingHabit === 'yes' ? 8 : 0)), 18, 95);
-  const calculatedProductivity = clamp(Math.round(58 + studyHours * 5 + connectedCount * 3 + (hasGithub ? 4 : 0) + (hasLeetcode ? 3 : 0) - Math.max(0, 7 - sleepHours) * 3 - Math.max(0, stressLevel - 6) * 3), 30, 98);
-  const calculatedRecovery = clamp(Math.round(54 + sleepHours * 4 + exerciseFrequency * 6 - stressLevel * 3 - (smokingHabit === 'yes' ? 10 : 0)), 18, 96);
+  const calculatedBurnout = clamp(Math.round(42 + Math.max(0, genderThresholds.idealSleepHours - sleepHours) * 8 + Math.max(0, studyHours - genderThresholds.heavyStudyHours) * 5 + stressLevel * 2 - exerciseFrequency * 3 + (smokingHabit === 'yes' ? 8 : 0) + periodRecoveryLoad - maleRecoveryCredit), 18, 95);
+  const calculatedProductivity = clamp(Math.round(58 + studyHours * 5 + connectedCount * 3 + (hasGithub ? 4 : 0) + (hasLeetcode ? 3 : 0) - Math.max(0, genderThresholds.idealSleepHours - sleepHours) * 3 - Math.max(0, stressLevel - 6) * 3), 30, 98);
+  const calculatedRecovery = clamp(Math.round(54 + sleepHours * 4 + exerciseFrequency * genderThresholds.exerciseWeight - stressLevel * 3 - (smokingHabit === 'yes' ? 10 : 0) - periodRecoveryLoad), 18, 96);
   const calculatedFinance = clamp(Math.round(50 + rawSavingsRate * 0.8 - stressLevel * 2 - (expenditure > income && income > 0 ? 18 : 0)), 8, 98);
 
   const analytics = dashboardData?.analytics || profile.aiScores || {};
@@ -707,6 +751,7 @@ function buildInsights(profile, dashboardData = null) {
     productivityScore,
     income,
     expenditure,
+    gender,
   });
   const healthState = deriveHealthState({ healthScore, burnoutState: thresholds.burnout, wellnessState: thresholds.wellness });
   const metricStates = dashboardData?.metricStates || dashboardData?.analytics?.metricStates || {};
@@ -1022,13 +1067,41 @@ function mergeFeed(items) {
 }
 
 function normalizeThresholds(apiThresholds, context) {
+  const genderThresholds = getGenderThresholds(context.gender);
+
   return {
-    sleep: apiThresholds?.sleep || thresholdState(context.sleepHours < 5 ? 'critical' : context.sleepHours < 7 ? 'warning' : 'healthy', context.sleepHours),
+    sleep: apiThresholds?.sleep || thresholdState(context.sleepHours < genderThresholds.criticalSleepHours ? 'critical' : context.sleepHours < genderThresholds.idealSleepHours ? 'warning' : 'healthy', context.sleepHours),
     stress: apiThresholds?.stress || thresholdState(context.stressLevel >= 7 ? 'critical' : context.stressLevel >= 5 ? 'warning' : 'healthy', context.stressLevel),
-    burnout: apiThresholds?.burnout || thresholdState(context.burnoutRisk > 70 ? 'critical' : context.burnoutRisk >= 40 ? 'warning' : 'healthy', context.burnoutRisk),
+    burnout: apiThresholds?.burnout || thresholdState(context.burnoutRisk > genderThresholds.criticalBurnout ? 'critical' : context.burnoutRisk >= genderThresholds.warningBurnout ? 'warning' : 'healthy', context.burnoutRisk),
     financial: apiThresholds?.financial || thresholdState(savingsStatusFromRate(context.income > 0 ? ((context.income - context.expenditure) / context.income) * 100 : 0), context.financeScore),
-    wellness: apiThresholds?.wellness || thresholdState(context.recoveryScore < 45 ? 'critical' : context.recoveryScore < 65 ? 'warning' : 'healthy', context.recoveryScore),
+    wellness: apiThresholds?.wellness || thresholdState(context.recoveryScore < genderThresholds.criticalWellness ? 'critical' : context.recoveryScore < genderThresholds.warningWellness ? 'warning' : 'healthy', context.recoveryScore),
     productivity: apiThresholds?.productivity || thresholdState(context.productivityScore < 45 ? 'critical' : context.productivityScore < 65 ? 'warning' : 'healthy', context.productivityScore),
+  };
+}
+
+function getGenderThresholds(gender) {
+  if (gender === 'female') {
+    return {
+      idealSleepHours: 7.5,
+      criticalSleepHours: 5.5,
+      heavyStudyHours: 6,
+      warningBurnout: 38,
+      criticalBurnout: 68,
+      warningWellness: 67,
+      criticalWellness: 47,
+      exerciseWeight: 5.5,
+    };
+  }
+
+  return {
+    idealSleepHours: 7,
+    criticalSleepHours: 5,
+    heavyStudyHours: 7,
+    warningBurnout: 42,
+    criticalBurnout: 72,
+    warningWellness: 63,
+    criticalWellness: 43,
+    exerciseWeight: 6,
   };
 }
 

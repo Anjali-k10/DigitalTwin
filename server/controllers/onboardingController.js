@@ -122,12 +122,17 @@ function normalizeOnboardingPayload(body = {}) {
     calendarProfile: sanitizeString(body.calendarProfile ?? integrations.googleCalendar?.profileLink),
     linkedinProfile: sanitizeString(body.linkedinProfile ?? integrations.linkedin?.profileLink),
     bankingProfile: sanitizeString(body.bankingProfile ?? integrations.banking?.profileLink),
+    gender: sanitizeGender(body.gender ?? lifestyle.gender),
     sleepHours: sanitizeNumber(body.sleepHours ?? lifestyle.sleepHours, 7),
     studyHours: sanitizeNumber(body.studyHours ?? lifestyle.studyHours, 4),
     exerciseFrequency: sanitizeNumber(body.exerciseFrequency ?? lifestyle.exerciseFrequency, 2),
     spendingStyle: sanitizeString(body.spendingStyle ?? lifestyle.spendingStyle, 'balanced'),
     smokingHabit: sanitizeString(body.smokingHabit ?? lifestyle.smokingHabits, 'no'),
     periodTracking: sanitizeString(body.periodTracking ?? lifestyle.periodTracking, 'not_now'),
+    genderSpecificHealthContext: sanitizeString(
+      body.genderSpecificHealthContext ?? lifestyle.genderSpecificHealthContext,
+      'not_now'
+    ),
     monthlyIncome: sanitizeNumber(body.monthlyIncome ?? financialPatterns.monthlyIncome, 0),
     monthlyExpenditure: sanitizeNumber(body.monthlyExpenditure ?? financialPatterns.monthlyExpenditure, 0),
     savingsHabit: sanitizeString(body.savingsHabit ?? financialPatterns.savingsHabits, 'moderate'),
@@ -136,6 +141,10 @@ function normalizeOnboardingPayload(body = {}) {
 }
 
 function validateOnboardingPayload(payload) {
+  if (!['female', 'male'].includes(payload.gender)) {
+    return 'Select your gender';
+  }
+
   if (!Array.isArray(payload.selectedSignals) || payload.selectedSignals.length === 0) {
     return 'Select at least one behavioral signal';
   }
@@ -164,22 +173,19 @@ function validateOnboardingPayload(payload) {
 }
 
 async function getAiResults(payload, ruleScores) {
-  const aiPayload = {
+  const aiPayload = buildAiEnginePayload(payload);
+  const correlationPayload = {
+    data: buildCorrelationDataPoints(payload),
     selectedSignals: payload.selectedSignals,
-    sleepHours: payload.sleepHours,
-    studyHours: payload.studyHours,
-    exerciseFrequency: payload.exerciseFrequency,
-    monthlyIncome: payload.monthlyIncome,
-    monthlyExpenditure: payload.monthlyExpenditure,
-    financialStressLevel: payload.financialStressLevel,
-    spendingStyle: payload.spendingStyle,
-    savingsHabit: payload.savingsHabit,
+    gender: payload.gender,
+    periodTracking: payload.periodTracking,
+    genderSpecificHealthContext: payload.genderSpecificHealthContext,
   };
 
   const results = await Promise.allSettled([
     predictBurnout(aiPayload),
     predictProductivity(aiPayload),
-    analyzeCorrelations(aiPayload),
+    analyzeCorrelations(correlationPayload),
   ]);
 
   const burnoutData = results[0].status === 'fulfilled' ? results[0].value : null;
@@ -190,7 +196,7 @@ async function getAiResults(payload, ruleScores) {
   return {
     aiSource: fulfilledCount === 3 ? 'flask' : fulfilledCount > 0 ? 'mixed' : 'fallback',
     scores: {
-      burnoutRisk: clamp(extractScore(burnoutData, ['burnoutRisk', 'burnout_risk', 'score'], ruleScores.burnoutRisk), 0, 100),
+      burnoutRisk: clamp(extractPercentScore(burnoutData, ['burnoutRisk', 'burnout_risk', 'risk_score', 'score'], ruleScores.burnoutRisk), 0, 100),
       productivityScore: clamp(extractScore(productivityData, ['productivityScore', 'productivity_score', 'score'], ruleScores.productivityScore), 0, 100),
       financialHealth: ruleScores.financialHealth,
       wellnessBalance: ruleScores.wellnessBalance,
@@ -225,25 +231,30 @@ async function getIntegrationAnalytics(payload) {
 }
 
 function calculateRuleBasedScores(payload) {
+  const genderThresholds = getGenderThresholds(payload.gender);
   const savingsRate = payload.monthlyIncome > 0
     ? ((payload.monthlyIncome - payload.monthlyExpenditure) / payload.monthlyIncome) * 100
     : 0;
   const overspendingPenalty = payload.monthlyExpenditure > payload.monthlyIncome && payload.monthlyIncome > 0 ? 18 : 0;
+  const sleepDeficit = Math.max(0, genderThresholds.idealSleepHours - payload.sleepHours);
+  const heavyStudyLoad = Math.max(0, payload.studyHours - genderThresholds.heavyStudyHours);
+  const periodRecoveryLoad = payload.gender === 'female' && payload.periodTracking === 'irregular' ? 5 : 0;
+  const maleRecoveryCredit = payload.gender === 'male' && payload.genderSpecificHealthContext !== 'not_now' && payload.exerciseFrequency >= 3 ? 3 : 0;
 
   const burnoutRisk = clamp(
-    Math.round(35 + Math.max(0, 7 - payload.sleepHours) * 9 + Math.max(0, payload.studyHours - 6) * 6 + payload.financialStressLevel * 2 - payload.exerciseFrequency * 3),
+    Math.round(35 + sleepDeficit * 9 + heavyStudyLoad * 6 + payload.financialStressLevel * 2 - payload.exerciseFrequency * 3 + periodRecoveryLoad - maleRecoveryCredit),
     10,
     95
   );
 
   const productivityScore = clamp(
-    Math.round(58 + payload.studyHours * 5 + payload.exerciseFrequency * 3 - Math.max(0, 6 - payload.sleepHours) * 4 - Math.max(0, payload.financialStressLevel - 6) * 3),
+    Math.round(58 + payload.studyHours * 5 + payload.exerciseFrequency * 3 - Math.max(0, genderThresholds.minimumRecoverySleep - payload.sleepHours) * 4 - Math.max(0, payload.financialStressLevel - 6) * 3 - Math.max(0, periodRecoveryLoad - 2)),
     20,
     98
   );
 
   const wellnessBalance = clamp(
-    Math.round(52 + payload.sleepHours * 4 + payload.exerciseFrequency * 6 - payload.financialStressLevel * 3 - (payload.smokingHabit === 'yes' ? 10 : 0)),
+    Math.round(52 + payload.sleepHours * 4 + payload.exerciseFrequency * genderThresholds.exerciseWeight - payload.financialStressLevel * 3 - (payload.smokingHabit === 'yes' ? 10 : 0) - periodRecoveryLoad),
     15,
     96
   );
@@ -490,6 +501,7 @@ function generateAiInsights(payload, aiResults, thresholdStates, integrationAnal
 }
 
 function calculateThresholdStates(payload, scores) {
+  const genderThresholds = getGenderThresholds(payload.gender);
   const savingsRate = payload.monthlyIncome > 0
     ? Math.round(((payload.monthlyIncome - payload.monthlyExpenditure) / payload.monthlyIncome) * 100)
     : 0;
@@ -497,7 +509,11 @@ function calculateThresholdStates(payload, scores) {
   return {
     sleep: buildThresholdState({
       score: payload.sleepHours,
-      status: payload.sleepHours < 5 ? 'critical' : payload.sleepHours < 7 ? 'warning' : 'healthy',
+      status: payload.sleepHours < genderThresholds.criticalSleepHours
+        ? 'critical'
+        : payload.sleepHours < genderThresholds.idealSleepHours
+          ? 'warning'
+          : 'healthy',
       label: `${payload.sleepHours}h sleep`,
     }),
     stress: buildThresholdState({
@@ -507,7 +523,11 @@ function calculateThresholdStates(payload, scores) {
     }),
     burnout: buildThresholdState({
       score: scores.burnoutRisk,
-      status: scores.burnoutRisk > 70 ? 'critical' : scores.burnoutRisk >= 40 ? 'warning' : 'healthy',
+      status: scores.burnoutRisk > genderThresholds.criticalBurnout
+        ? 'critical'
+        : scores.burnoutRisk >= genderThresholds.warningBurnout
+          ? 'warning'
+          : 'healthy',
       label: `${scores.burnoutRisk}% burnout risk`,
     }),
     financial: buildThresholdState({
@@ -517,7 +537,11 @@ function calculateThresholdStates(payload, scores) {
     }),
     wellness: buildThresholdState({
       score: scores.wellnessBalance,
-      status: scores.wellnessBalance < 45 ? 'critical' : scores.wellnessBalance < 65 ? 'warning' : 'healthy',
+      status: scores.wellnessBalance < genderThresholds.criticalWellness
+        ? 'critical'
+        : scores.wellnessBalance < genderThresholds.warningWellness
+          ? 'warning'
+          : 'healthy',
       label: `${scores.wellnessBalance}% wellness balance`,
     }),
     productivity: buildThresholdState({
@@ -779,9 +803,12 @@ function buildSignals(profile) {
       banking: Boolean(profile.bankingProfile),
     },
     lifestyle: {
+      gender: profile.gender,
       sleepHours: profile.sleepHours,
       studyHours: profile.studyHours,
       exerciseFrequency: profile.exerciseFrequency,
+      periodTracking: profile.periodTracking,
+      genderSpecificHealthContext: profile.genderSpecificHealthContext,
     },
     financial: {
       monthlyIncome: profile.monthlyIncome,
@@ -797,9 +824,81 @@ function sanitizeString(value, fallback = '') {
   return String(value).replace(/[<>]/g, '').trim().slice(0, 300);
 }
 
+function sanitizeGender(value) {
+  const gender = sanitizeString(value).toLowerCase();
+  return ['female', 'male'].includes(gender) ? gender : '';
+}
+
 function sanitizeStringArray(value) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => sanitizeString(item)).filter(Boolean).slice(0, 20);
+}
+
+function buildAiEnginePayload(payload) {
+  const deepWorkRatio = clampDecimal(
+    0.35 + (payload.sleepHours - 6) * 0.05 + payload.exerciseFrequency * 0.03 - payload.financialStressLevel * 0.025,
+    0.1,
+    0.95
+  );
+  const interruptions = clamp(payload.financialStressLevel * 2 + Math.max(0, 6 - payload.sleepHours), 0, 50);
+  const breaksTaken = clamp(Math.round(2 + payload.exerciseFrequency + Math.max(0, payload.sleepHours - 6)), 0, 20);
+
+  return {
+    hours_worked: clampDecimal(payload.studyHours, 0, 24),
+    sleep_hours: clampDecimal(payload.sleepHours, 0, 24),
+    stress_level: clamp(payload.financialStressLevel, 1, 10),
+    breaks_taken: breaksTaken,
+    screen_time: clampDecimal(payload.studyHours + 3 + payload.financialStressLevel * 0.35, 0, 24),
+    social_interactions: clamp(payload.exerciseFrequency + (payload.spendingStyle === 'variable' ? 2 : 1), 0, 50),
+    tasks_completed: clamp(Math.round(payload.studyHours * 2 + payload.exerciseFrequency), 0, 100),
+    focus_time_hours: clampDecimal(payload.studyHours, 0, 24),
+    meetings_count: clamp(Math.round(payload.financialStressLevel / 2), 0, 20),
+    deep_work_ratio: deepWorkRatio,
+    interruptions,
+    gender: payload.gender,
+    periodTracking: payload.periodTracking,
+    genderSpecificHealthContext: payload.genderSpecificHealthContext,
+  };
+}
+
+function buildCorrelationDataPoints(payload) {
+  return [-2, -1, 0, 1, 2].map((offset) => ({
+    sleep_hours: clampDecimal(payload.sleepHours + offset * 0.25, 0, 24),
+    study_hours: clampDecimal(payload.studyHours + offset * 0.4, 0, 24),
+    exercise_frequency: clamp(payload.exerciseFrequency + (offset > 0 ? 1 : 0), 0, 7),
+    financial_stress: clamp(payload.financialStressLevel + offset, 1, 10),
+    spending_pressure: payload.monthlyIncome > 0
+      ? clampDecimal((payload.monthlyExpenditure / payload.monthlyIncome) * 100 + offset * 2, 0, 200)
+      : 0,
+  }));
+}
+
+function getGenderThresholds(gender) {
+  if (gender === 'female') {
+    return {
+      idealSleepHours: 7.5,
+      minimumRecoverySleep: 6.5,
+      criticalSleepHours: 5.5,
+      heavyStudyHours: 6,
+      warningBurnout: 38,
+      criticalBurnout: 68,
+      warningWellness: 67,
+      criticalWellness: 47,
+      exerciseWeight: 5.5,
+    };
+  }
+
+  return {
+    idealSleepHours: 7,
+    minimumRecoverySleep: 6,
+    criticalSleepHours: 5,
+    heavyStudyHours: 7,
+    warningBurnout: 42,
+    criticalBurnout: 72,
+    warningWellness: 63,
+    criticalWellness: 43,
+    exerciseWeight: 6,
+  };
 }
 
 function getDateKey(date) {
@@ -833,8 +932,17 @@ function extractScore(data, keys, fallback) {
   return fallback;
 }
 
+function extractPercentScore(data, keys, fallback) {
+  const score = extractScore(data, keys, fallback);
+  return score > 0 && score <= 1 ? score * 100 : score;
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(Math.round(value), min), max);
+}
+
+function clampDecimal(value, min, max) {
+  return Math.min(Math.max(Number(value), min), max);
 }
 
 function average(values) {

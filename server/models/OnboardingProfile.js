@@ -84,6 +84,11 @@ const onboardingProfileSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    gender: {
+      type: String,
+      enum: ['female', 'male', ''],
+      default: '',
+    },
     sleepHours: {
       type: Number,
       min: 0,
@@ -113,6 +118,11 @@ const onboardingProfileSchema = new mongoose.Schema(
       default: 'no',
     },
     periodTracking: {
+      type: String,
+      trim: true,
+      default: 'not_now',
+    },
+    genderSpecificHealthContext: {
       type: String,
       trim: true,
       default: 'not_now',

@@ -7,9 +7,10 @@ const navItems = [
   { label: 'Health', href: '/health', icon: HeartIcon },
   { label: 'Finance', href: '/finance', icon: WalletIcon },
   { label: 'Career', href: '/career', icon: BriefIcon },
+  { label: 'Goals', href: '/goals', icon: TargetIcon },
   { label: 'Intelligence', href: '/intelligence', icon: SparkIcon },
   { label: 'Simulation', href: '/simulation', icon: BranchIcon },
-  { label: 'AI Copilot', href: '/copilot', icon: ChatIcon },
+  { label: 'Twin Copilot', href: '/copilot', icon: ChatIcon },
   { label: 'Notifications', href: '/notifications', icon: BellIcon },
 ];
 
@@ -108,6 +109,10 @@ function WalletIcon({ className }) {
 
 function BriefIcon({ className }) {
   return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M9 7V5h6v2m-9 3h12m-14 0h18v10H4V10Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>;
+}
+
+function TargetIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" stroke="currentColor" strokeWidth="2" /><path d="M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="2" /><path d="M12 12h.01" stroke="currentColor" strokeWidth="3" strokeLinecap="round" /></svg>;
 }
 
 function SparkIcon({ className }) {

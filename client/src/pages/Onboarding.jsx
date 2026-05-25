@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import axios from 'axios';
 import toast, { Toaster } from 'react-hot-toast';
 import BackgroundBeams from '../components/BackgroundBeams';
@@ -84,12 +85,14 @@ const initialOnboardingData = {
     banking: { status: 'skipped', profileLink: '' },
   },
   lifestyle: {
+    gender: '',
     sleepHours: 7,
     studyHours: 4,
     exerciseFrequency: 3,
     spendingStyle: 'balanced',
     smokingHabits: 'no',
     periodTracking: 'not_now',
+    genderSpecificHealthContext: 'not_now',
   },
   financialPatterns: {
     monthlyIncome: '',
@@ -102,6 +105,7 @@ const initialOnboardingData = {
 function Onboarding() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
+  const [navigationDirection, setNavigationDirection] = useState(1);
   const [onboardingData, setOnboardingData] = useState(initialOnboardingData);
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [messageIndex, setMessageIndex] = useState(0);
@@ -239,6 +243,7 @@ function Onboarding() {
     });
 
     toast.success('Integrations skipped for now.');
+    setNavigationDirection(1);
     setStep(4);
   };
 
@@ -275,6 +280,12 @@ function Onboarding() {
       lifestyle: {
         ...current.lifestyle,
         [field]: value,
+        ...(field === 'gender' && value === 'male'
+          ? { periodTracking: 'not_applicable' }
+          : {}),
+        ...(field === 'gender' && value === 'female'
+          ? { genderSpecificHealthContext: 'not_now' }
+          : {}),
       },
     }));
   };
@@ -290,6 +301,11 @@ function Onboarding() {
   };
 
   const validateCurrentStep = () => {
+    if (step === 1 && !onboardingData.lifestyle.gender) {
+      showIncompleteToast('Select your gender to personalize health thresholds.');
+      return false;
+    }
+
     if (step === 2 && onboardingData.behavioralAnalysis.focusAreas.length === 0) {
       showIncompleteToast('Choose at least one behavioral signal for your Digital Twin.');
       return false;
@@ -324,10 +340,12 @@ function Onboarding() {
       return;
     }
 
+    setNavigationDirection(1);
     setStep((current) => Math.min(current + 1, totalSteps));
   };
 
   const handleBack = () => {
+    setNavigationDirection(-1);
     setStep((current) => Math.max(current - 1, 1));
   };
 
@@ -358,28 +376,64 @@ function Onboarding() {
     }
   };
 
-  const renderWelcome = () => (
+  const renderGenderSelection = () => (
     <div className="mx-auto flex max-w-2xl flex-col items-center py-12 text-center">
       <DigitalTwinLogo className="mb-8 h-14 w-14 rounded-lg border border-[#d8e5ea] shadow-lg shadow-[#b8d1da]/60" />
       <p className="mb-3 text-sm font-semibold text-[#416f82]">DigitalTwin profile setup</p>
       <h1 className="max-w-xl text-4xl font-semibold leading-tight text-zinc-950 sm:text-5xl">
-        Build a Digital Twin profile from your real-world patterns.
+        Select your gender
       </h1>
       <p className="mt-5 max-w-lg text-base leading-7 text-zinc-600">
-        DigitalTwin starts by understanding behavior, integrations, lifestyle, and financial rhythm. Dashboard personalization happens after this analysis.
+        This helps DigitalTwin personalize health questions, recovery baselines, and threshold calculations.
       </p>
+
+      <div className="mt-9 grid w-full max-w-lg grid-cols-1 gap-3 sm:grid-cols-2">
+        {[
+          {
+            value: 'female',
+            label: 'Female',
+            detail: 'Includes period-aware health context.',
+            selectedClass: 'border-[#d98ba1] bg-[#fff2f5] ring-4 ring-[#f8d9e2]',
+            idleClass: 'border-[#efd4dc] bg-white hover:border-[#e7aabc] hover:bg-[#fff7f9]',
+          },
+          {
+            value: 'male',
+            label: 'Male',
+            detail: 'Uses male recovery and fitness baselines.',
+            selectedClass: 'border-[#4f85b5] bg-[#eaf4ff] ring-4 ring-[#cfe6fb]',
+            idleClass: 'border-[#d8e5ea] bg-white hover:border-[#6fa5d0] hover:bg-[#eef7ff]',
+          },
+        ].map((option) => {
+          const selected = onboardingData.lifestyle.gender === option.value;
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => updateLifestyle('gender', option.value)}
+              className={`min-h-32 rounded-lg border p-5 text-left shadow-sm transition-colors duration-200 ${
+                selected ? option.selectedClass : option.idleClass
+              }`}
+            >
+              <span className="block text-lg font-semibold text-zinc-950">{option.label}</span>
+              <span className="mt-3 block text-sm leading-6 text-zinc-600">{option.detail}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <button
         type="button"
         onClick={handleNext}
         className="mt-9 rounded-lg bg-[#416f82] px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-[#b8d1da]/60 transition hover:-translate-y-0.5 hover:bg-[#2f5362] focus:outline-none focus:ring-4 focus:ring-[#e5f0f4]"
       >
-        Start Analysis
+        Next
       </button>
     </div>
   );
 
   const renderBehavioralAnalysis = () => (
-    <section className="animate-[fadeIn_220ms_ease-out]">
+    <section>
       <div className="mb-7">
         <p className="text-sm font-semibold text-[#416f82]">Behavioral analysis</p>
         <h2 className="mt-2 text-3xl font-semibold text-zinc-950">Choose the signals to model</h2>
@@ -420,7 +474,7 @@ function Onboarding() {
   );
 
   const renderIntegrations = () => (
-    <section className="animate-[fadeIn_220ms_ease-out]">
+    <section>
       <div className="mb-7 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-sm font-semibold text-[#416f82]">Integration profiles</p>
@@ -438,71 +492,94 @@ function Onboarding() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+      <div className="rounded-lg border border-[#d8e5ea] bg-white/80 p-3 shadow-sm sm:p-4">
+        <div className="space-y-2">
         {integrationProfiles.map((integration) => {
           const data = onboardingData.integrations[integration.id];
           const connected = data.status === 'connected';
           const saved = data.status === 'saved';
           const verifying = data.status === 'verifying';
+          const hasValue = Boolean(data[integration.field]?.trim());
 
           return (
-            <article
+            <div
               key={integration.id}
-              className={`flex min-h-64 flex-col rounded-lg border bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                connected || saved ? 'border-[#5f8fa0] bg-[#eef6f8]' : 'border-[#d8e5ea] hover:border-[#a9c8d2]'
+              className={`grid grid-cols-1 items-center gap-3 rounded-lg border px-3 py-2 transition-colors md:grid-cols-[240px_minmax(0,1fr)_120px] ${
+                connected || saved
+                  ? 'border-[#b8d8c5] bg-[#f4fbf6]'
+                  : 'border-transparent bg-white hover:border-[#d8e5ea] hover:bg-[#f7fbfc]'
               }`}
             >
-              <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-lg bg-[#e6f1f4] text-[#416f82]">
-                <integration.logo />
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e6f1f4] text-[#416f82]">
+                  <integration.logo />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="truncate text-base font-semibold text-zinc-950">{integration.title}</h3>
+                    <ChevronRightIcon />
+                  </div>
+                  <p className="mt-1 line-clamp-1 text-xs text-zinc-500">{integration.description}</p>
+                </div>
               </div>
-              <h3 className="text-base font-semibold text-zinc-950">{integration.title}</h3>
-              <p className="mt-3 flex-1 text-sm leading-6 text-zinc-600">{integration.description}</p>
 
               {integration.field && (
-                <label className="mt-4 block">
-                  <span className="mb-2 block text-xs font-semibold uppercase text-zinc-500">
-                    {integration.label}
-                  </span>
+                <label className="block min-w-0">
+                  <span className="sr-only">{integration.label}</span>
                   <input
-                  type="text"
-                  value={data[integration.field]}
-                  disabled={verifying}
-                  onChange={(event) => updateIntegrationField(integration.id, integration.field, event.target.value)}
-                  placeholder={integration.placeholder}
-                    className="w-full rounded-lg border border-[#c8dbe2] bg-[#f7fbfc] px-3 py-2 text-sm outline-none transition placeholder:text-zinc-400 disabled:cursor-not-allowed disabled:opacity-60 focus:border-[#5f8fa0] focus:bg-white focus:ring-4 focus:ring-[#e5f0f4]"
+                    type="text"
+                    value={data[integration.field]}
+                    disabled={verifying}
+                    onChange={(event) => updateIntegrationField(integration.id, integration.field, event.target.value)}
+                    placeholder={integration.placeholder}
+                    className="h-10 w-full rounded-lg border border-[#c8dbe2] bg-[#f8fafb] px-4 text-sm font-medium text-zinc-900 outline-none transition placeholder:text-zinc-400 disabled:cursor-not-allowed disabled:opacity-60 focus:border-[#5f8fa0] focus:bg-white focus:ring-4 focus:ring-[#e5f0f4]"
                   />
                 </label>
               )}
 
-              <div className="mt-5 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleConnectIntegration(integration)}
-                  disabled={verifying}
-                  className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                    connected || saved ? 'bg-[#5f8fa0] text-white' : verifying ? 'cursor-not-allowed bg-[#9ebfca] text-white' : 'bg-[#416f82] text-white hover:bg-[#2f5362]'
-                  }`}
-                >
-                  {connected ? 'Connected' : saved ? 'Saved' : verifying ? 'Checking...' : 'Connect'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIntegrationStatus(integration.id, 'skipped')}
-                  disabled={verifying}
-                  className="rounded-lg border border-[#c8dbe2] px-3 py-2 text-sm font-semibold text-[#4e6670] transition hover:bg-[#f3f8fa]"
-                >
-                  Skip
-                </button>
+              <div className="flex items-center justify-start gap-3 md:justify-end">
+                {connected || saved ? (
+                  <>
+                    <span className="inline-flex h-9 w-9 items-center justify-center text-[#22c55e]" aria-label={connected ? 'Connected' : 'Saved'}>
+                      <VerifiedIcon />
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIntegrationStatus(integration.id, 'skipped')}
+                      disabled={verifying}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#c8dbe2] bg-white text-[#4b7bec] transition hover:border-[#9ebfca] hover:bg-[#f3f8fa] disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label={`Remove ${integration.title}`}
+                    >
+                      <TrashIcon />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleConnectIntegration(integration)}
+                    disabled={verifying || !hasValue}
+                    className={`h-9 min-w-24 rounded-lg border px-4 text-sm font-semibold transition ${
+                      verifying
+                        ? 'cursor-not-allowed border-[#9ebfca] bg-[#9ebfca] text-white'
+                        : hasValue
+                          ? 'border-[#c8dbe2] bg-white text-zinc-950 hover:border-[#9ebfca] hover:bg-[#f3f8fa]'
+                          : 'cursor-not-allowed border-[#d8e5ea] bg-[#f7fbfc] text-zinc-400'
+                    }`}
+                  >
+                    {verifying ? 'Checking...' : 'Submit'}
+                  </button>
+                )}
               </div>
-            </article>
+            </div>
           );
         })}
+        </div>
       </div>
     </section>
   );
 
   const renderLifestyle = () => (
-    <section className="animate-[fadeIn_220ms_ease-out]">
+    <section>
       <div className="mb-7">
         <p className="text-sm font-semibold text-[#416f82]">Lifestyle understanding</p>
         <h2 className="mt-2 text-3xl font-semibold text-zinc-950">Add everyday context</h2>
@@ -557,22 +634,35 @@ function Onboarding() {
           ]}
           onChange={(value) => updateLifestyle('smokingHabits', value)}
         />
-        <ChoiceCard
-          label="Period tracking preference"
-          value={onboardingData.lifestyle.periodTracking}
-          options={[
-            { value: 'enabled', label: 'Track' },
-            { value: 'not_now', label: 'Not now' },
-            { value: 'not_applicable', label: 'Not applicable' },
-          ]}
-          onChange={(value) => updateLifestyle('periodTracking', value)}
-        />
+        {onboardingData.lifestyle.gender === 'female' ? (
+          <ChoiceCard
+            label="Period tracking preference"
+            value={onboardingData.lifestyle.periodTracking}
+            options={[
+              { value: 'enabled', label: 'Track' },
+              { value: 'not_now', label: 'Not now' },
+              { value: 'irregular', label: 'Irregular' },
+            ]}
+            onChange={(value) => updateLifestyle('periodTracking', value)}
+          />
+        ) : (
+          <ChoiceCard
+            label="Training recovery focus"
+            value={onboardingData.lifestyle.genderSpecificHealthContext}
+            options={[
+              { value: 'strength', label: 'Strength' },
+              { value: 'cardio', label: 'Cardio' },
+              { value: 'not_now', label: 'Not now' },
+            ]}
+            onChange={(value) => updateLifestyle('genderSpecificHealthContext', value)}
+          />
+        )}
       </div>
     </section>
   );
 
   const renderFinancialPatterns = () => (
-    <section className="animate-[fadeIn_220ms_ease-out]">
+    <section>
       <div className="mb-7">
         <p className="text-sm font-semibold text-[#416f82]">Financial patterns</p>
         <h2 className="mt-2 text-3xl font-semibold text-zinc-950">Map money behavior</h2>
@@ -659,7 +749,7 @@ function Onboarding() {
   );
 
   const renderCurrentStep = () => {
-    if (step === 1) return renderWelcome();
+    if (step === 1) return renderGenderSelection();
     if (step === 2) return renderBehavioralAnalysis();
     if (step === 3) return renderIntegrations();
     if (step === 4) return renderLifestyle();
@@ -679,7 +769,6 @@ function Onboarding() {
               <DigitalTwinLogo className="h-10 w-10 rounded-lg border border-[#d8e5ea] shadow-sm" />
               <div>
                 <p className="text-sm font-semibold text-zinc-950">DigitalTwin</p>
-                <p className="text-xs text-zinc-500">Digital Twin profile builder</p>
               </div>
             </div>
 
@@ -698,7 +787,21 @@ function Onboarding() {
           </div>
         </header>
 
-        <div className="flex-1 px-5 py-8 sm:px-8 lg:px-10">{renderCurrentStep()}</div>
+        <div className="flex-1 overflow-hidden px-5 py-8 sm:px-8 lg:px-10">
+          <AnimatePresence mode="wait" initial={false} custom={navigationDirection}>
+            <motion.div
+              key={step}
+              custom={navigationDirection}
+              initial={{ opacity: 0, x: navigationDirection > 0 ? 34 : -34, filter: 'blur(6px)' }}
+              animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, x: navigationDirection > 0 ? -18 : 18, filter: 'blur(4px)' }}
+              transition={{ duration: 0.46, ease: [0.16, 1, 0.3, 1] }}
+              style={{ willChange: 'opacity, transform, filter' }}
+            >
+              {renderCurrentStep()}
+            </motion.div>
+          </AnimatePresence>
+        </div>
 
         {step > 1 && step < 6 && (
           <footer className="flex flex-col gap-3 border-t border-white/25 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
@@ -726,8 +829,8 @@ function Onboarding() {
 
 function RangeCard({ label, value, min, max, suffix, onChange }) {
   return (
-    <div className="rounded-lg border border-[#d8e5ea] bg-white p-5 shadow-sm">
-      <div className="mb-5 flex items-center justify-between gap-4">
+    <div className="rounded-lg border border-[#d8e5ea] bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-4">
         <label className="text-sm font-semibold text-zinc-950">{label}</label>
         <span className="rounded-md bg-zinc-100 px-3 py-1 text-sm font-semibold text-zinc-800">
           {value} {suffix}
@@ -741,7 +844,7 @@ function RangeCard({ label, value, min, max, suffix, onChange }) {
         onChange={(event) => onChange(Number(event.target.value))}
         className="w-full accent-[#5f8fa0]"
       />
-      <div className="mt-3 flex justify-between text-xs font-medium text-zinc-400">
+      <div className="mt-2 flex justify-between text-xs font-medium text-zinc-400">
         <span>{min}</span>
         <span>{max}</span>
       </div>
@@ -751,7 +854,7 @@ function RangeCard({ label, value, min, max, suffix, onChange }) {
 
 function InputCard({ label, value, placeholder, onChange }) {
   return (
-    <div className="rounded-lg border border-[#d8e5ea] bg-white p-5 shadow-sm">
+    <div className="rounded-lg border border-[#d8e5ea] bg-white p-4 shadow-sm">
       <label className="text-sm font-semibold text-zinc-950">{label}</label>
       <input
         type="number"
@@ -759,7 +862,7 @@ function InputCard({ label, value, placeholder, onChange }) {
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-5 w-full rounded-lg border border-[#c8dbe2] bg-[#f7fbfc] px-4 py-3 text-sm font-medium text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#5f8fa0] focus:bg-white focus:ring-4 focus:ring-[#e5f0f4]"
+        className="mt-3 h-11 w-full rounded-lg border border-[#c8dbe2] bg-[#f7fbfc] px-4 text-sm font-medium text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-[#5f8fa0] focus:bg-white focus:ring-4 focus:ring-[#e5f0f4]"
       />
     </div>
   );
@@ -767,34 +870,39 @@ function InputCard({ label, value, placeholder, onChange }) {
 
 function SelectCard({ label, value, options, onChange }) {
   return (
-    <div className="rounded-lg border border-[#d8e5ea] bg-white p-5 shadow-sm">
+    <div className="rounded-lg border border-[#d8e5ea] bg-white p-4 shadow-sm">
       <label className="text-sm font-semibold text-zinc-950">{label}</label>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-5 w-full rounded-lg border border-[#c8dbe2] bg-[#f7fbfc] px-4 py-3 text-sm font-medium text-zinc-900 outline-none transition focus:border-[#5f8fa0] focus:bg-white focus:ring-4 focus:ring-[#e5f0f4]"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <div className="relative mt-3">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-11 w-full appearance-none rounded-lg border border-[#c8dbe2] bg-[#f7fbfc] px-4 pr-12 text-sm font-medium text-zinc-900 outline-none transition focus:border-[#5f8fa0] focus:bg-white focus:ring-4 focus:ring-[#e5f0f4]"
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <span className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-[#6f8790]">
+          <ChevronDownIcon />
+        </span>
+      </div>
     </div>
   );
 }
 
 function ChoiceCard({ label, value, options, onChange }) {
   return (
-    <div className="rounded-lg border border-[#d8e5ea] bg-white p-5 shadow-sm">
+    <div className="rounded-lg border border-[#d8e5ea] bg-white p-4 shadow-sm">
       <p className="text-sm font-semibold text-zinc-950">{label}</p>
-      <div className="mt-5 grid grid-cols-3 gap-2">
+      <div className="mt-3 grid grid-cols-3 gap-2">
         {options.map((option) => (
           <button
             key={option.value}
             type="button"
             onClick={() => onChange(option.value)}
-            className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+            className={`min-h-10 rounded-lg border px-3 py-2 text-sm font-semibold transition ${
               value === option.value
                 ? 'border-[#5f8fa0] bg-[#e6f1f4] text-[#2f5362]'
                 : 'border-[#c8dbe2] bg-white text-[#4e6670] hover:bg-[#f3f8fa]'
@@ -805,6 +913,41 @@ function ChoiceCard({ label, value, options, onChange }) {
         ))}
       </div>
     </div>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4 shrink-0 text-zinc-700" viewBox="0 0 24 24" fill="none">
+      <path d="m9 18 6-6-6-6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24" fill="none">
+      <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function VerifiedIcon() {
+  return (
+    <svg aria-hidden="true" className="h-8 w-8" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M10.55 2.9a2 2 0 0 1 2.9 0l1.03 1.1 1.48-.18a2 2 0 0 1 2.22 2.22L18 7.52l1.1 1.03a2 2 0 0 1 0 2.9L18 12.48l.18 1.48a2 2 0 0 1-2.22 2.22L14.48 16l-1.03 1.1a2 2 0 0 1-2.9 0L9.52 16l-1.48.18a2 2 0 0 1-2.22-2.22L6 12.48l-1.1-1.03a2 2 0 0 1 0-2.9L6 7.52l-.18-1.48a2 2 0 0 1 2.22-2.22L9.52 4l1.03-1.1Zm4.18 6.86a1 1 0 0 0-1.46-1.37l-2.31 2.46-.91-.91a1 1 0 0 0-1.42 1.42l1.64 1.64a1 1 0 0 0 1.44-.03l3.02-3.21Z" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none">
+      <path d="M4 7h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M6.5 7l.7 12.2A2 2 0 0 0 9.2 21h5.6a2 2 0 0 0 2-1.8L17.5 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 

@@ -4,10 +4,10 @@ const pageTitles = {
   '/dashboard': 'Your Digital Twin dashboard',
   '/health': 'Health signals',
   '/finance': 'Financial patterns',
-  '/career': 'Career momentum',
+  '/career': 'Career',
   '/intelligence': 'Cross-domain intelligence',
   '/simulation': 'Scenario simulation',
-  '/copilot': 'AI Copilot',
+  '/copilot': 'Twin Copilot',
   '/notifications': 'Notifications',
   '/settings': 'Settings',
 };
