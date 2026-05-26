@@ -78,11 +78,11 @@ function Dashboard() {
 
         <main className="dashboard-scrollbar flex-1 overflow-y-auto px-6 py-6 lg:px-8">
           <section className="mb-6 animate-[fadeIn_280ms_ease-out]">
-            <div className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#5f8fa0]/70">
+            {/* <div className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#5f8fa0]/70">
               <span>Dashboard</span>
               <span>/</span>
               <span className="text-[#416f82]">Overview</span>
-            </div>
+            </div> */}
             <h1 className="text-4xl font-semibold tracking-tight text-[#1b1c1c]">Morning, {firstName}.</h1>
             <p className="mt-2 max-w-2xl text-base leading-7 text-[#596467]">
               Your health, finance, and career signals are in{' '}

@@ -1,6 +1,15 @@
+import React from 'react';
+
 const glassCardClass = 'rounded-lg border border-[#d8e5ea] bg-white/80 shadow-[0_10px_30px_rgba(0,0,0,0.035)] backdrop-blur transition hover:shadow-[0_18px_40px_rgba(0,0,0,0.06)]';
 
 const overviewMetrics = [
+  {
+    label: 'Savings Consistency',
+    value: 'Peak',
+    detail: '12-day active streak',
+    tone: 'primary',
+    bar: 100,
+  },
   {
     label: 'Financial Stability',
     value: '82%',
@@ -8,13 +17,6 @@ const overviewMetrics = [
     tone: 'primary',
     icon: ShieldIcon,
     ring: 82,
-  },
-  {
-    label: 'Savings Consistency',
-    value: 'Peak',
-    detail: '12-day active streak',
-    tone: 'primary',
-    bar: 100,
   },
   {
     label: 'Spending Balance',
@@ -32,42 +34,30 @@ const overviewMetrics = [
   },
 ];
 
-const consistencyDays = [
-  'bg-[#416f82]', 'bg-[#416f82]', 'bg-[#e4e2e1]', 'bg-[#416f82]', 'bg-[#d98b72]', 'bg-[#416f82]', 'bg-[#416f82]/70',
-  'bg-[#416f82]/80', 'bg-[#416f82]', 'bg-[#416f82]/60', 'bg-[#d98b72]', 'bg-[#416f82]', 'bg-[#e4e2e1]', 'bg-[#416f82]/80',
-  'bg-[#416f82]', 'bg-[#416f82]/70', 'bg-[#d98b72]/80', 'bg-[#416f82]', 'bg-[#416f82]', 'bg-[#416f82]/60', 'bg-[#e4e2e1]',
-  'bg-[#416f82]/80', 'bg-[#d98b72]', 'bg-[#416f82]', 'bg-[#416f82]/70', 'bg-[#416f82]', 'bg-[#e4e2e1]', 'bg-[#416f82]',
-];
-
 function Finance() {
   return (
     <div className="min-h-full bg-[#fbf9f8] px-5 py-6 text-[#1b1c1c] sm:px-6 lg:px-8">
+      {/* Header Section */}
       <section className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          {/* <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-[#5f8fa0]/75">
-            <span>Finance</span>
-            <span>/</span>
-            <span className="text-[#416f82]">Intelligence</span>
-          </div> */}
           <h1 className="text-4xl font-semibold tracking-tight text-[#1b1c1c]">Finance Intelligence</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#596467]">
-            Spending behavior, savings rhythm, stress purchases, and future financial trajectory.
+            Comprehensive tracking of behavioral spending metrics, global macroeconomic factors, and financial projections.
           </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <StatusPill icon={WalletIcon} label="Savings shield active" />
-          <StatusPill icon={TrendIcon} label="Cashflow stable" />
         </div>
       </section>
 
+      {/* 4 Required Metric Cards */}
       <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         {overviewMetrics.map((metric) => (
           <OverviewCard key={metric.label} metric={metric} />
         ))}
       </section>
 
+      {/* Unusual Spending Spike & Macro Market Analysis */}
       <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
-        <article className={`${glassCardClass} p-6 xl:col-span-8`}>
+        {/* Unusual Spending Spike Detector */}
+        <article className={`${glassCardClass} p-6 xl:col-span-7`}>
           <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className="text-xl font-semibold">Unusual Spending Spike Detector</h2>
@@ -78,7 +68,7 @@ function Finance() {
             </span>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
             <div className="space-y-4">
               <div className="rounded-lg border-l-4 border-[#8b4e3f] bg-[#f5f3f2] p-4">
                 <div className="flex items-start gap-3">
@@ -86,7 +76,7 @@ function Finance() {
                   <div>
                     <p className="text-base font-semibold">Weekend food delivery spending increased 28%</p>
                     <p className="mt-1 text-sm leading-6 text-[#596467]">
-                      This spike correlates with a 15% reduction in sleep consistency during the same period.
+                      This spike correlates with a 15% reduction in sleep consistency during high-stress windows.
                     </p>
                   </div>
                 </div>
@@ -112,90 +102,89 @@ function Finance() {
           </div>
         </article>
 
-        <article className={`${glassCardClass} flex flex-col p-6 xl:col-span-4`}>
+        {/* Macro Market Context Card (War, Laws, Politics, Pandemics) */}
+        <article className={`${glassCardClass} flex flex-col p-6 xl:col-span-5`}>
           <div className="mb-5">
-            <h2 className="text-xl font-semibold">Market Context</h2>
-            <p className="mt-1 text-sm text-[#596467]">Global intelligence overlay</p>
+            <h2 className="text-xl font-semibold">Macro Market Analysis</h2>
+            <p className="mt-1 text-sm text-[#596467]">Global catalysts: Political, Legal, Conflict, & Health updates</p>
           </div>
-          <div className="flex-1 space-y-5">
-            <div className="flex items-start gap-4">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#ffdad2]/65 text-[#8b4e3f]">
-                <DownTrendIcon className="h-5 w-5" />
+          <div className="flex-1 space-y-4 overflow-y-auto max-h-[280px] pr-1">
+            <MarketImpactRow 
+              title="Geopolitical Conflict / War Risks" 
+              detail="Supply chain disruptions detected in energy sectors. Expect minor inflationary spikes in regional utility and fuel costs." 
+              type="danger" 
+            />
+            <MarketImpactRow 
+              title="Tax Law Amendments" 
+              detail="New capital gains structural changes passed. Portfolio reassessment recommended prior to end-of-quarter cycles." 
+              type="warning" 
+            />
+            <MarketImpactRow 
+              title="Political / Policy Shifts" 
+              detail="Tech sector regulatory updates impacting high-growth assets. Shifting allocation safely toward defensive indexes." 
+              type="info" 
+            />
+            <MarketImpactRow 
+              title="Public Health / Pandemics" 
+              detail="Healthcare buffer thresholds optimized automatically following global biosurveillance warning models." 
+              type="info" 
+            />
+          </div>
+        </article>
+      </section>
+
+      {/* Observation & Suggestions and Cross Intelligence */}
+      <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
+        {/* Finance Observation & Suggestion */}
+        <article className={`${glassCardClass} p-6 xl:col-span-6`}>
+          <h2 className="text-xl font-semibold mb-4">Finance Observation & Suggestions</h2>
+          <div className="space-y-4">
+            <div className="flex items-start gap-4 rounded-lg border border-[#eef0ef] bg-white/70 p-4">
+              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#e6f1f4] text-[#416f82]">
+                <BoltIcon className="h-4 w-4" />
               </div>
               <div>
-                <p className="font-semibold">Tech hiring slowdown detected</p>
-                <p className="mt-1 text-sm leading-6 text-[#596467]">Strengthen portfolio momentum during market uncertainty.</p>
+                <p className="text-sm font-semibold text-[#1b1c1c]">Impulse Spending Trigger Mitigated</p>
+                <p className="text-xs leading-5 text-[#596467] mt-1">Identified a loop of 10 PM social media surfing causing stress buys. Restricting shopping apps after 9 PM could yield up to $140/mo in direct savings.</p>
               </div>
             </div>
-            <div className="rounded-lg border border-[#c8dbe2] bg-[#eef6f8] p-4">
-              <p className="text-sm italic leading-6 text-[#2f5362]">
-                Preserve liquidity for the next 90 days. Focus on skill consolidation instead of certification purchases.
-              </p>
+            <div className="flex items-start gap-4 rounded-lg border border-[#eef0ef] bg-white/70 p-4">
+              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#e6f1f4] text-[#416f82]">
+                <VerifiedIcon className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-[#1b1c1c]">Liquidity Optimization Target</p>
+                <p className="text-xs leading-5 text-[#596467] mt-1">To counter market volatility, freeze all speculative certification/luxury purchases for 90 days. Redirect excess funds entirely into your Savings Shield.</p>
+              </div>
             </div>
           </div>
-          <button className="mt-6 rounded-lg bg-[#416f82] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#2f5362]" type="button">
-            Adjust Savings Shield
-          </button>
+        </article>
+
+        {/* Cross Intelligence */}
+        <article className={`${glassCardClass} p-6 space-y-4 xl:col-span-6`}>
+          <h2 className="text-xl font-semibold">Cross Intelligence</h2>
+          <RecommendationCard
+            icon={WarningIcon}
+            title="Overspending Inflation Correlates to Stress"
+            detail="When spending climbs past target budgets, internal economic pressure compromises focus, triggering reactive lifestyle cycles."
+            tone="warm"
+          />
+          <RecommendationCard
+            icon={MindIcon}
+            title="Biometric Stress & Health Degradation Risk"
+            detail="Spike indicators show higher financial anomalies precisely when sleep drops below 6.5 hours. Wellness directly dictates savings retention."
+            tone="primary"
+          />
         </article>
       </section>
 
-      <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
-        <article className={`${glassCardClass} p-6 xl:col-span-6`}>
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold">Stress-Spending Correlation</h2>
-            <p className="mt-1 text-sm text-[#596467]">Cross-domain behavior mapping</p>
-          </div>
-          <div className="relative py-8">
-            <div className="relative z-10 flex items-center justify-between gap-4">
-              <CorrelationNode icon={CodeIcon} label="Late-night coding stress" tone="primary" />
-              <div className="relative h-0.5 flex-1 bg-gradient-to-r from-[#416f82]/30 via-[#8b4e3f]/60 to-[#8b4e3f]/30">
-                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-[#d8e5ea] bg-[#fbf9f8] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#596467]">
-                  0.82 correl.
-                </span>
-              </div>
-              <CorrelationNode icon={CoffeeIcon} label="Snack and caffeine" tone="warm" />
-            </div>
-            <svg className="absolute inset-0 h-full w-full opacity-25" preserveAspectRatio="none" viewBox="0 0 520 180">
-              <path d="M70 92 Q260 154 450 92" fill="none" stroke="#416f82" strokeDasharray="6 6" strokeWidth="2" />
-              <path d="M70 112 Q260 34 450 112" fill="none" stroke="#8b4e3f" strokeDasharray="6 6" strokeWidth="2" />
-            </svg>
-          </div>
-          <p className="mt-3 text-center text-sm leading-6 text-[#596467]">
-            Improving sleep consistency could save approximately <span className="font-semibold text-[#1b1c1c]">$140/mo</span> in stress purchases.
-          </p>
-        </article>
-
-        <article className={`${glassCardClass} p-6 xl:col-span-6`}>
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">Consistency Calendar</h2>
-              <p className="mt-1 text-sm text-[#596467]">Financial wellness streak</p>
-            </div>
-            <div className="flex gap-2">
-              <span className="h-3 w-3 rounded-full bg-[#416f82]" title="Balanced day" />
-              <span className="h-3 w-3 rounded-full bg-[#d98b72]" title="Spike day" />
-              <span className="h-3 w-3 rounded-full bg-[#e4e2e1]" title="No data" />
-            </div>
-          </div>
-          <div className="grid grid-cols-7 gap-3">
-            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day) => (
-              <div key={day} className="py-1 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-[#596467]">
-                {day}
-              </div>
-            ))}
-            {consistencyDays.map((className, index) => (
-              <div key={index} className={`aspect-square rounded-md opacity-85 transition hover:opacity-100 ${className}`} />
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
-        <article className={`${glassCardClass} p-6 xl:col-span-8`}>
+      {/* Financial Trajectory (Future Projection Graph) */}
+      <section className="grid grid-cols-1 gap-6">
+        <article className={`${glassCardClass} p-6`}>
           <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <h2 className="text-xl font-semibold">Financial Trajectory</h2>
-              <p className="mt-1 text-sm text-[#596467]">AI projection based on current habits</p>
+              <p className="mt-1 text-sm text-[#596467]">AI forecasting based on current lifestyle habits versus optimized stability tracks</p>
             </div>
             <div className="flex flex-wrap gap-4 text-sm">
               <Legend color="#d98b72" label="Current path" />
@@ -223,35 +212,22 @@ function Finance() {
             <span className="text-xl font-semibold text-[#416f82]">+$18,450.00</span>
           </div>
         </article>
-
-        <article className={`${glassCardClass} space-y-5 p-6 xl:col-span-4`}>
-          <h2 className="text-xl font-semibold">Cross Analysis</h2>
-          <RecommendationCard
-            icon={WarningIcon}
-            title="Overspending can raise stress"
-            detail="When spending climbs above the usual budget, money pressure can increase stress and weaken recovery."
-            tone="warm"
-          />
-          <RecommendationCard
-            icon={MindIcon}
-            title="Stress can affect health"
-            detail="Higher stress may reduce sleep consistency, increase fatigue, and make healthy routines harder to maintain."
-            tone="primary"
-          />
-        </article>
       </section>
+    </div>
+  );
+}
 
-      <section className={`${glassCardClass} p-6`}>
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Intelligence Feed</h2>
-          <button className="text-sm font-semibold text-[#416f82] underline" type="button">View historical feed</button>
-        </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <FeedCard icon={BoltIcon} text={<span>Stress spending reduced after improving sleep consistency by <strong>20%</strong>.</span>} tone="primary" />
-          <FeedCard icon={VerifiedIcon} text={<span>Savings consistency is improving <strong>recovery stability</strong> during high-workload weeks.</span>} tone="primary" />
-          <FeedCard icon={MindIcon} text={<span>Identified <strong>impulse purchase trigger</strong>: 10 PM social media scrolling.</span>} tone="warm" />
-        </div>
-      </section>
+{/* --- Sub-Components --- */}
+
+function MarketImpactRow({ title, detail, type }) {
+  let badgeColor = "bg-[#eef6f8] text-[#416f82] border-[#c8dbe2]";
+  if (type === "danger") badgeColor = "bg-[#ffdad2] text-[#8b4e3f] border-[#efcfc5]";
+  if (type === "warning") badgeColor = "bg-[#fff1ed] text-[#d98b72] border-[#efcfc5]";
+
+  return (
+    <div className={`p-3 rounded-lg border ${badgeColor} bg-opacity-40 flex flex-col gap-1`}>
+      <h4 className="text-xs font-bold uppercase tracking-wider">{title}</h4>
+      <p className="text-sm leading-relaxed text-[#1b1c1c]">{detail}</p>
     </div>
   );
 }
@@ -319,15 +295,6 @@ function ProgressRing({ value, color }) {
   );
 }
 
-function StatusPill({ icon: Icon, label }) {
-  return (
-    <div className="flex items-center gap-2 rounded-full border border-[#d8e5ea] bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-[#416f82] shadow-sm">
-      <Icon className="h-4 w-4" />
-      <span>{label}</span>
-    </div>
-  );
-}
-
 function MiniStat({ label, value, delta }) {
   return (
     <div className="rounded-lg border border-[#d8e5ea] bg-white/55 p-4">
@@ -335,19 +302,6 @@ function MiniStat({ label, value, delta }) {
       <p className="text-lg font-semibold">
         {value} {delta && <span className="text-sm text-[#8b4e3f]">{delta}</span>}
       </p>
-    </div>
-  );
-}
-
-function CorrelationNode({ icon: Icon, label, tone }) {
-  const warm = tone === 'warm';
-
-  return (
-    <div className="w-28 text-center">
-      <div className={`mx-auto mb-2 grid h-16 w-16 place-items-center rounded-full border-2 ${warm ? 'border-[#efcfc5] bg-[#fff1ed] text-[#8b4e3f]' : 'border-[#c8dbe2] bg-[#eef6f8] text-[#416f82]'}`}>
-        <Icon className="h-6 w-6" />
-      </div>
-      <p className="text-sm font-medium leading-5">{label}</p>
     </div>
   );
 }
@@ -366,26 +320,13 @@ function RecommendationCard({ icon: Icon, title, detail, tone }) {
 
   return (
     <button className={`group w-full rounded-lg border p-4 text-left transition ${warm ? 'border-[#efcfc5] hover:bg-[#fff1ed]' : 'border-[#c8dbe2] bg-[#eef6f8]/60 hover:bg-[#eef6f8]'}`} type="button">
-      <div className="mb-3 flex items-start justify-between">
+      <div className="mb-2 flex items-start justify-between">
         <Icon className={`h-5 w-5 ${warm ? 'text-[#8b4e3f]' : 'text-[#416f82]'}`} />
         <ArrowRightIcon className="h-4 w-4 text-[#596467]/50 transition group-hover:text-[#416f82]" />
       </div>
-      <p className="font-semibold">{title}</p>
-      <p className="mt-1 text-sm leading-6 text-[#596467]">{detail}</p>
+      <p className="font-semibold text-sm">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-[#596467]">{detail}</p>
     </button>
-  );
-}
-
-function FeedCard({ icon: Icon, text, tone }) {
-  const warm = tone === 'warm';
-
-  return (
-    <div className="flex items-start gap-4 rounded-lg border border-[#eef0ef] bg-white/70 p-4">
-      <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${warm ? 'bg-[#ffdad2]/60 text-[#8b4e3f]' : 'bg-[#e6f1f4] text-[#416f82]'}`}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <p className="text-sm leading-6 text-[#424842]">{text}</p>
-    </div>
   );
 }
 
@@ -395,14 +336,6 @@ function IconBase({ className, style, children }) {
       {children}
     </svg>
   );
-}
-
-function WalletIcon({ className }) {
-  return <IconBase className={className}><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H19v14H6.5A2.5 2.5 0 0 1 4 16.5v-9Z" stroke="currentColor" strokeWidth="2" /><path d="M16 12h4v4h-4a2 2 0 0 1 0-4Z" stroke="currentColor" strokeWidth="2" /></IconBase>;
-}
-
-function TrendIcon({ className }) {
-  return <IconBase className={className}><path d="m4 16 5-5 4 4 7-8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M15 7h5v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></IconBase>;
 }
 
 function ShieldIcon({ className, style }) {
@@ -415,18 +348,6 @@ function ArrowUpIcon({ className }) {
 
 function WarningIcon({ className }) {
   return <IconBase className={className}><path d="M12 9v4M12 17h.01M10.3 4.4 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.4a2 2 0 0 0-3.4 0Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></IconBase>;
-}
-
-function DownTrendIcon({ className }) {
-  return <IconBase className={className}><path d="m4 8 5 5 4-4 7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M15 16h5v-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></IconBase>;
-}
-
-function CodeIcon({ className }) {
-  return <IconBase className={className}><path d="m8 9-4 3 4 3M16 9l4 3-4 3M14 5l-4 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></IconBase>;
-}
-
-function CoffeeIcon({ className }) {
-  return <IconBase className={className}><path d="M4 8h12v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8ZM16 10h2a2 2 0 1 1 0 4h-2M6 3v2M10 3v2M14 3v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></IconBase>;
 }
 
 function ArrowRightIcon({ className }) {
