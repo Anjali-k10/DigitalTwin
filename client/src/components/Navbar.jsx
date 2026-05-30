@@ -6,7 +6,7 @@ const pageTitles = {
   '/finance': ' ',
   '/career': ' ',
   '/intelligence': 'Cross-domain intelligence',
-  '/simulation': 'Scenario simulation',
+  '/simulation': ' ',
   '/copilot': 'Twin Copilot',
   '/notifications': 'Notifications',
   '/settings': 'Settings',

@@ -48,6 +48,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    dob: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    links: {
+      linkedin: { type: String, trim: true, default: '' },
+      github: { type: String, trim: true, default: '' },
+      portfolio: { type: String, trim: true, default: '' },
+      fitband: { type: String, trim: true, default: '' },
+      banking: { type: String, trim: true, default: '' },
+    },
 
     // Subscription & Role
     role: {
@@ -148,6 +160,7 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
  */
 userSchema.methods.getProfile = function () {
   const user = this.toObject();
+  user.passwordSet = Boolean(user.password);
   delete user.password;
   delete user.verificationToken;
   return user;

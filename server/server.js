@@ -15,6 +15,7 @@ import healthRoutes from './routes/healthRoutes.js';
 import careerRoutes from './routes/careerRoutes.js';
 import aiRoutes from './routes/aiRoutes.js';
 import goalRoutes from './routes/goalRoutes.js';
+import simulationRoutes from './routes/simulationRoutes.js';
 // ✅ FIXED: Only one import for integrations
 import integrationRoutes from './routes/integrationRoutes.js'; 
 
@@ -74,6 +75,7 @@ app.use('/api/finance', financeRoutes);
 app.use('/api/health-metrics', healthRoutes);
 app.use('/api/career', careerRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/simulation', simulationRoutes);
 
 // ✅ FIXED: Only mounted once
 app.use('/api/integrations', integrationRoutes);

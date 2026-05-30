@@ -152,7 +152,7 @@ export const login = async (req, res, next) => {
  */
 export const getProfile = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user.userId).select('+password');
 
     if (!user) {
       return res.status(404).json({
@@ -176,7 +176,7 @@ export const getProfile = async (req, res, next) => {
  */
 export const updateProfile = async (req, res, next) => {
   try {
-    const { firstName, lastName, bio, phone, language, timezone, notifications } = req.body;
+    const { firstName, lastName, email, bio, phone, dob, links, language, timezone, notifications } = req.body;
 
     const user = await User.findById(req.user.userId);
 
@@ -190,8 +190,20 @@ export const updateProfile = async (req, res, next) => {
     // Update allowed fields
     if (firstName) user.firstName = firstName.trim();
     if (lastName) user.lastName = lastName.trim();
+    if (email) user.email = email.toLowerCase().trim();
     if (bio) user.bio = bio.trim();
     if (phone) user.phone = phone;
+    if (dob !== undefined) user.dob = String(dob).trim();
+    if (links && typeof links === 'object') {
+      user.links = {
+        ...user.links,
+        linkedin: sanitizeProfileText(links.linkedin ?? user.links?.linkedin),
+        github: sanitizeProfileText(links.github ?? user.links?.github),
+        portfolio: sanitizeProfileText(links.portfolio ?? user.links?.portfolio),
+        fitband: sanitizeProfileText(links.fitband ?? user.links?.fitband),
+        banking: sanitizeProfileText(links.banking ?? user.links?.banking),
+      };
+    }
 
     // Update preferences
     if (language) user.preferences.language = language;
@@ -273,3 +285,8 @@ export const changePassword = async (req, res, next) => {
 };
 
 export default { signup, login, getProfile, updateProfile, changePassword };
+
+function sanitizeProfileText(value) {
+  if (value === undefined || value === null) return '';
+  return String(value).replace(/[<>]/g, '').trim().slice(0, 300);
+}
