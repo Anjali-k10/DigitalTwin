@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useGamification } from '../context/GamificationContext';
+import { useIntegrations } from '../context/IntegrationContext';
 import {
   Eye, EyeOff, AlertCircle, Baby, Flower2,
   Sparkles, ChevronRight, ChevronLeft, Wifi, WifiOff,
@@ -106,12 +107,13 @@ export default function Health() {
   const [weatherError, setWeatherError]     = useState(false);
   const [dashProfile, setDashProfile]       = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const { integrations, isConnected: intIsConnected } = useIntegrations();
 
   // ── ONE-TIME connection state ──────────────────────────────────────────────
   // Read ONCE at mount from localStorage — never re-derived on every render.
   // alreadyConnected  → user has a saved Fitbit session  → auto-sync, no prompt ever
   // promptDismissed   → user explicitly closed the banner → never show it again
-  const [alreadyConnected]  = useState(() => !!localStorage.getItem(LS_FITBIT));
+  const [alreadyConnected]  = useState(() => intIsConnected('fitbit') || !!localStorage.getItem(LS_FITBIT));
   const [promptDismissed, setPromptDismissed] = useState(
     () => localStorage.getItem(LS_DISMISSED) === 'true'
   );
@@ -171,6 +173,29 @@ export default function Health() {
 
     fetchWeather();
   }, []);
+
+  useEffect(() => {
+    if (!integrations?.fitbit) return;
+
+    const fitbitFromContext = integrations.fitbit;
+
+    if (fitbitFromContext.status === 'connected' && syncStatus !== 'connected') {
+      if (fitbitFromContext.username) {
+        localStorage.setItem(LS_FITBIT, JSON.stringify({
+          username: fitbitFromContext.username,
+          connectedAt: fitbitFromContext.connectedAt || new Date().toISOString(),
+        }));
+      }
+      setSyncStatus('connected');
+      fetchWearable();
+    }
+
+    if (fitbitFromContext.status === 'disconnected' && syncStatus === 'connected') {
+      localStorage.removeItem(LS_FITBIT);
+      setWearable(null);
+      setSyncStatus('idle');
+    }
+  }, [integrations?.fitbit?.status]);
 
   // After dashProfile loads, also auto-sync if fitbitProfile is set server-side
   useEffect(() => {
@@ -439,7 +464,7 @@ export default function Health() {
                   <span className="animate-ping absolute h-full w-full rounded-full bg-[#16a34a] opacity-75" />
                   <span className="relative h-2.5 w-2.5 rounded-full bg-[#16a34a]" />
                 </span>
-                Wearable Synced
+                Wearable Synced{integrations?.fitbit?.username ? ` · ${integrations.fitbit.username}` : ''}
               </div>
             ) : syncStatus === 'error' ? (
               // ⚠️ Sync failed — show error + reconnect link (user explicitly clicks)

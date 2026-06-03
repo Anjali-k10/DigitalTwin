@@ -5,8 +5,6 @@ import connectDB from './config/database.js';
 import { initializeFirebase } from './config/firebase.js';
 import { corsMiddleware } from './middleware/cors.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
-
-// Route Imports
 import authRoutes from './routes/auth.js';
 import onboardingRoutes from './routes/onboarding.js';
 import gamificationRoutes from './routes/gamificationRoutes.js';
@@ -21,7 +19,6 @@ import assistantRoutes from './routes/assistantRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
-// ✅ FIXED: Only one import for integrations
 import integrationRoutes from './routes/integrationRoutes.js'; 
 
 import { startCaretakerJobs } from './cron/caretaker.js';
@@ -36,16 +33,14 @@ const app = express();
 // Security middleware
 app.use(helmet());
 
-// CORS middleware
+
 app.use(corsMiddleware);
 
 // Body parser middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// ============================================
-// INITIALIZE EXTERNAL SERVICES
-// ============================================
+
 
 // Connect to MongoDB
 await connectDB();
@@ -53,14 +48,7 @@ await connectDB();
 // Initialize Firebase Admin SDK
 initializeFirebase();
 
-// ============================================
-// API ROUTES
-// ============================================
 
-/**
- * Health Check Endpoint
- * Returns server status
- */
 app.get('/api/server-health', (req, res) => {
   return res.status(200).json({
     success: true,

@@ -13,6 +13,7 @@ import {
   MessageCircle, Camera, Send, Lock, Trophy, Map 
 } from 'lucide-react';
 import { useGamification } from '../context/GamificationContext';
+import { useIntegrations } from '../context/IntegrationContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -46,10 +47,11 @@ function Dashboard() {
   const user = getStoredUser();
   const firstName = user?.firstName || 'Anjali';
   const profile = useMemo(() => normalizeProfile(dashboardData?.profile || getStoredProfile()), [dashboardData]);
-  const insights = useMemo(() => buildInsights(profile, dashboardData), [profile, dashboardData]);
+  const { integrations } = useIntegrations();
+  const insights = useMemo(() => buildInsights(profile, dashboardData, integrations), [profile, dashboardData, integrations]);
   const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-  // ✅ PULL REAL GAMIFICATION STATES FROM BACKEND
+  
   const { totalXP = 0, level = 1, history = [], unlockedBadges = [], availableBadges = [] } = useGamification();
 
   useEffect(() => {
@@ -133,6 +135,7 @@ function Dashboard() {
                 unlockedBadges={unlockedBadges} 
                 availableBadges={availableBadges} 
                 profile={profile} 
+                liveIntegrations={integrations}
               />
             </motion.div>
 
@@ -167,7 +170,7 @@ function Dashboard() {
 }
 
 // ─── Gamified Journey Map (UPGRADED MASSIVE XP VAULT) ───────────────────────
-function GamifiedJourneyMap({ totalXP, level, history, unlockedBadges, availableBadges, profile }) {
+function GamifiedJourneyMap({ totalXP, level, history, unlockedBadges, availableBadges, profile, liveIntegrations }) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [shareTip, setShareTip] = useState(null);
 
@@ -179,9 +182,10 @@ function GamifiedJourneyMap({ totalXP, level, history, unlockedBadges, available
   const remainingToNext = 500 - (totalXP % 500); 
   const progressPercent = Math.min(((totalXP % 500) / 500) * 100, 100);
 
-  // Verify Integration Statuses
-  const integrations = profile?.integrations || {};
-  const isConnected = (key) => integrations[key]?.status === 'connected';
+  // Use live context first, fall back to profile for SSR / loading state
+  const isConnected = (key) =>
+    liveIntegrations?.[key]?.status === 'connected' ||
+    profile?.integrations?.[key]?.status === 'connected';
 
   // Fallback to static milestones if backend badges haven't loaded yet
   const fallbackMilestones = [
@@ -1078,7 +1082,7 @@ function normalizeProfile(r) {
   };
 }
 
-function buildInsights(profile, dashboardData = null) {
+function buildInsights(profile, dashboardData = null, liveIntegrations = null) {
   const sleepHours = Number(profile.lifestyle.sleepHours || 7);
   const studyHours = Number(profile.lifestyle.studyHours || 4);
   const exerciseFrequency = Number(profile.lifestyle.exerciseFrequency || 2);
@@ -1087,11 +1091,12 @@ function buildInsights(profile, dashboardData = null) {
   const expenditure = Number(profile.financialPatterns.monthlyExpenditure || 0);
   const rawSavingsRate = income > 0 ? Math.round(((income - expenditure) / income) * 100) : 0;
   const savingsRate = income > 0 ? Math.max(0, rawSavingsRate) : 28;
-  const connectedCount = Object.values(profile.integrations || {}).filter(i => i.status === 'connected').length;
+  const integrationSnapshot = liveIntegrations || profile.integrations || {};
+  const connectedCount = Object.values(integrationSnapshot).filter(i => i.status === 'connected').length;
   const monthlyBufferValue = income > 0 ? income - expenditure : null;
   const monthlyBuffer = monthlyBufferValue !== null ? formatMoney(monthlyBufferValue) : 'Add data';
-  const hasGithub = profile.integrations?.github?.status === 'connected';
-  const hasLeetcode = profile.integrations?.leetcode?.status === 'connected';
+  const hasGithub = integrationSnapshot.github?.status === 'connected';
+  const hasLeetcode = integrationSnapshot.leetcode?.status === 'connected';
   const smokingHabit = profile.lifestyle.smokingHabits || 'no';
   const gender = profile.lifestyle.gender || '';
   const gt = getGenderThresholds(gender);

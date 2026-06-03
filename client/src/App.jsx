@@ -1,5 +1,4 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
-
 import ProtectedRoute from './components/ProtectedRoute';
 import PublicRoute from './components/PublicRoute';
 import OnboardingRoute from './components/OnboardingRoute';
@@ -21,11 +20,13 @@ import Landing from './pages/Landing';
 import { GamificationProvider } from './context/GamificationContext';
 import ToastOverlay from './components/ToastOverlay';
 import DailySyncModal from './components/DailySyncModal';
+import { IntegrationProvider } from './context/IntegrationContext';
 
 function App() {
   return (
     // ✅ The Provider MUST wrap everything!
     <GamificationProvider>
+      <IntegrationProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
@@ -56,10 +57,9 @@ function App() {
           </Route>
         </Routes>
       </BrowserRouter>
-      
-      {/* ✅ The Toast Overlay sits here, listening for XP! */}
+    
       <ToastOverlay />
-      
+      </IntegrationProvider>
     </GamificationProvider>
   );
 }

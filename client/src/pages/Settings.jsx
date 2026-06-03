@@ -3,304 +3,254 @@ import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import axios from 'axios';
 import {
-  Activity,
-  Bot,
-  CalendarDays,
-  Check,
-  CircleHelp,
-  Code2,
-  CreditCard,
-  ExternalLink,
-  Globe,
-  LockKeyhole,
-  LogOut,
-  Mail,
-  Network,
-  Pencil,
-  Phone,
-  Save,
-  ShieldCheck,
-  UserRound,
-  X,
+  Activity, Bot, CalendarDays, Check, CircleHelp, Code2, CreditCard,
+  ExternalLink, Globe, LockKeyhole, LogOut, Mail, Network, Pencil,
+  Phone, Save, ShieldCheck, UserRound, X, Wifi, WifiOff, RefreshCw,
+  AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronUp,
+  Zap,
 } from 'lucide-react';
 import { getSettings, updateSettings } from '../services/voiceAssistantService';
 import { logoutUser } from '../features/auth/authThunks';
+import { useIntegrations } from '../context/IntegrationContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
+// ─── Integration definitions ──────────────────────────────────────────────────
+const INTEGRATIONS = [
+  {
+    key: 'github',
+    label: 'GitHub',
+    icon: Code2,
+    color: '#e2e8f0',
+    accent: 'rgba(226,232,240,0.15)',
+    border: 'rgba(226,232,240,0.2)',
+    description: 'Sync repos, stars, languages and contribution activity.',
+    fieldLabel: 'GitHub username',
+    fieldKey: 'username',
+    placeholder: 'e.g. torvalds',
+    statsKeys: ['publicRepos', 'totalStars', 'followers'],
+    statsLabels: ['Repos', 'Stars', 'Followers'],
+    pages: ['Dashboard', 'Career'],
+  },
+  {
+    key: 'leetcode',
+    label: 'LeetCode',
+    icon: Zap,
+    color: '#fbbf24',
+    accent: 'rgba(251,191,36,0.12)',
+    border: 'rgba(251,191,36,0.25)',
+    description: 'Pull solved problems, streak, and difficulty breakdown.',
+    fieldLabel: 'LeetCode username',
+    fieldKey: 'username',
+    placeholder: 'e.g. neal_wu',
+    statsKeys: ['totalSolved', 'streak', 'ranking'],
+    statsLabels: ['Solved', 'Streak', 'Rank'],
+    pages: ['Dashboard', 'Career'],
+  },
+  {
+    key: 'fitbit',
+    label: 'Fitbit / Wearable',
+    icon: Activity,
+    color: '#34d399',
+    accent: 'rgba(52,211,153,0.1)',
+    border: 'rgba(52,211,153,0.25)',
+    description: 'Steps, sleep, heart rate, HRV — live health metrics.',
+    fieldLabel: 'Fitbit username or email',
+    fieldKey: 'username',
+    placeholder: 'e.g. gargi@email.com',
+    statsKeys: ['steps', 'sleepHours', 'avgHeartRate'],
+    statsLabels: ['Steps', 'Sleep (h)', 'Heart Rate'],
+    pages: ['Health', 'Dashboard'],
+  },
+  {
+    key: 'linkedin',
+    label: 'LinkedIn',
+    icon: Network,
+    color: '#60a5fa',
+    accent: 'rgba(96,165,250,0.1)',
+    border: 'rgba(96,165,250,0.25)',
+    description: 'Profile URL for career intelligence and networking insights.',
+    fieldLabel: 'LinkedIn profile URL or username',
+    fieldKey: 'username',
+    placeholder: 'e.g. https://linkedin.com/in/username',
+    statsKeys: [],
+    statsLabels: [],
+    pages: ['Career', 'Dashboard'],
+  },
+  {
+    key: 'banking',
+    label: 'Banking / Finance',
+    icon: CreditCard,
+    color: '#a78bfa',
+    accent: 'rgba(167,139,250,0.1)',
+    border: 'rgba(167,139,250,0.25)',
+    description: 'Plaid link or banking profile for cashflow intelligence.',
+    fieldLabel: 'Banking profile link',
+    fieldKey: 'profileLink',
+    placeholder: 'e.g. Plaid link or bank profile URL',
+    statsKeys: [],
+    statsLabels: [],
+    pages: ['Finance', 'Dashboard'],
+  },
+  {
+    key: 'portfolio',
+    label: 'Portfolio',
+    icon: Globe,
+    color: '#fb923c',
+    accent: 'rgba(251,146,60,0.1)',
+    border: 'rgba(251,146,60,0.25)',
+    description: 'Your personal website or portfolio for career signals.',
+    fieldLabel: 'Portfolio URL',
+    fieldKey: 'url',
+    placeholder: 'e.g. https://yoursite.dev',
+    statsKeys: [],
+    statsLabels: [],
+    pages: ['Career'],
+  },
+];
+
+// ─── Profile fields (unchanged from original) ─────────────────────────────────
 const editableFields = [
-  { key: 'email', label: 'Email', type: 'email', icon: Mail, placeholder: 'you@example.com' },
-  { key: 'phone', label: 'Phone number', type: 'tel', icon: Phone, placeholder: '+91 98765 43210' },
-  { key: 'password', label: 'Password', type: 'password', icon: LockKeyhole, placeholder: 'New password' },
+  { key: 'email',    label: 'Email',         type: 'email',    icon: Mail,         placeholder: 'you@example.com'    },
+  { key: 'phone',    label: 'Phone number',  type: 'tel',      icon: Phone,        placeholder: '+91 98765 43210'    },
+  { key: 'password', label: 'Password',      type: 'password', icon: LockKeyhole,  placeholder: 'New password'       },
 ];
 
-const platformFields = [
-  { key: 'linkedin', label: 'LinkedIn', icon: Network, placeholder: 'https://linkedin.com/in/username' },
-  { key: 'github', label: 'GitHub', icon: Code2, placeholder: 'https://github.com/username' },
-  { key: 'portfolio', label: 'Portfolio', icon: Globe, placeholder: 'https://your-site.com' },
-  { key: 'fitband', label: 'Fitband', icon: Activity, placeholder: 'Fitbit/Fitband profile or device link' },
-  { key: 'banking', label: 'Bank link', icon: CreditCard, placeholder: 'Banking profile or Plaid link' },
-];
-
+// ─── localStorage helpers ─────────────────────────────────────────────────────
 function readJson(key, fallback = null) {
-  try {
-    const stored = localStorage.getItem(key);
-    return stored ? JSON.parse(stored) : fallback;
-  } catch {
-    return fallback;
-  }
+  try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; } catch { return fallback; }
 }
-
 function getInitialProfile() {
   const user = readJson('user', {}) || {};
   const onboarding = readJson('lifetwinOnboardingProfile', {}) || {};
-  const links = user.links || user.platforms || onboarding.links || {};
-
   return {
     fullName: user.fullName || user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'DigitalTwin User',
     firstName: user.firstName || '',
-    lastName: user.lastName || '',
-    email: user.email || '',
-    phone: user.phone || onboarding.phone || '',
-    dob: user.dob || onboarding.dob || '',
-    password: user.password || '',
+    lastName: user.lastName  || '',
+    email:     user.email    || '',
+    phone:     user.phone    || onboarding.phone || '',
+    dob:       user.dob      || onboarding.dob   || '',
+    password:  '',
     passwordSet: Boolean(user.password || user.passwordSet),
-    linkedin: links.linkedin || user.linkedin || '',
-    github: links.github || user.github || '',
-    portfolio: links.portfolio || user.portfolio || '',
-    fitband: links.fitband || links.fitbit || user.fitband || onboarding.fitbitProfile || '',
-    banking: links.banking || links.bank || user.banking || onboarding.bankingProfile || '',
   };
 }
-
 function normalizeBackendProfile(user = {}, onboarding = {}) {
-  const localProfile = getInitialProfile();
-  const links = user.links || {};
+  const local = getInitialProfile();
   const fullName = user.fullName || user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim();
-
   return {
-    ...localProfile,
-    fullName: fullName || localProfile.fullName,
-    firstName: user.firstName || localProfile.firstName,
-    lastName: user.lastName || localProfile.lastName,
-    email: user.email || localProfile.email,
-    phone: user.phone || onboarding.phone || localProfile.phone,
-    dob: user.dob || onboarding.dob || localProfile.dob,
-    password: '',
-    passwordSet: Boolean(user.passwordSet || localProfile.passwordSet),
-    linkedin: links.linkedin || onboarding.linkedinProfile || localProfile.linkedin,
-    github: links.github || onboarding.githubUsername || localProfile.github,
-    portfolio: links.portfolio || localProfile.portfolio,
-    fitband: links.fitband || onboarding.fitbitProfile || localProfile.fitband,
-    banking: links.banking || onboarding.bankingProfile || localProfile.banking,
+    ...local,
+    fullName:    fullName    || local.fullName,
+    firstName:   user.firstName   || local.firstName,
+    lastName:    user.lastName    || local.lastName,
+    email:       user.email       || local.email,
+    phone:       user.phone       || onboarding.phone || local.phone,
+    dob:         user.dob         || onboarding.dob   || local.dob,
+    password:    '',
+    passwordSet: Boolean(user.passwordSet || local.passwordSet),
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
 function Settings() {
-  const navigate = useNavigate();
-  const dispatch = useDispatch();
+  const navigate  = useNavigate();
+  const dispatch  = useDispatch();
+  const { integrations, saveIntegration, disconnectIntegration, loading: intLoading, refreshIntegrations } = useIntegrations();
+
   const [profile, setProfile] = useState(getInitialProfile);
-  const [draft, setDraft] = useState(profile);
+  const [draft,   setDraft]   = useState(profile);
   const [editing, setEditing] = useState('');
   const [savedMessage, setSavedMessage] = useState('');
-  const [settings, setSettings] = useState({
-    theme: 'dark',
-    notifications: true,
-    twinAssistantEnabled: false,
-  });
+  const [settings, setSettings] = useState({ theme: 'dark', notifications: true, twinAssistantEnabled: false });
 
   useEffect(() => {
     let isMounted = true;
-
-    const loadBackendProfile = async () => {
+    const load = async () => {
       const token = localStorage.getItem('authToken');
-      if (!token) {
-        return;
-      }
-
+      if (!token) return;
       try {
         const headers = { Authorization: `Bearer ${token}` };
-        const [authResult, onboardingResult, settingsResult] = await Promise.allSettled([
-          axios.get(`${API_BASE_URL}/api/auth/profile`, { headers }),
-          axios.get(`${API_BASE_URL}/api/dashboard`, { headers }),
+        const [authR, dashR, settR] = await Promise.allSettled([
+          axios.get(`${API_BASE_URL}/api/auth/profile`,  { headers }),
+          axios.get(`${API_BASE_URL}/api/dashboard`,      { headers }),
           getSettings(),
         ]);
-
         if (!isMounted) return;
-
-        const authUser = authResult.status === 'fulfilled' ? authResult.value.data?.data || {} : {};
-        const onboardingProfile = onboardingResult.status === 'fulfilled' ? onboardingResult.value.data?.data?.profile || {} : {};
-        const backendSettings = settingsResult.status === 'fulfilled'
-          ? settingsResult.value
-          : { theme: 'dark', notifications: true, twinAssistantEnabled: false };
-        const nextProfile = normalizeBackendProfile(authUser, onboardingProfile);
-
-        localStorage.setItem('user', JSON.stringify(nextProfile));
-        localStorage.setItem('lifetwinOnboardingProfile', JSON.stringify(onboardingProfile));
-        setProfile(nextProfile);
-        setDraft(nextProfile);
-        setSettings(backendSettings);
-      } catch (error) {
-        if (!isMounted) return;
-        console.warn('Settings profile fallback:', error.response?.data?.message || error.message);
-      }
+        const authUser       = authR.status === 'fulfilled' ? authR.value.data?.data || {} : {};
+        const onboardingProf = dashR.status === 'fulfilled' ? dashR.value.data?.data?.profile || {} : {};
+        const backendSettings = settR.status === 'fulfilled' ? settR.value : { theme: 'dark', notifications: true, twinAssistantEnabled: false };
+        const next = normalizeBackendProfile(authUser, onboardingProf);
+        localStorage.setItem('user', JSON.stringify(next));
+        setProfile(next); setDraft(next); setSettings(backendSettings);
+      } catch (e) { console.warn('Settings load:', e.message); }
     };
-
-    loadBackendProfile();
-    return () => {
-      isMounted = false;
-    };
+    load();
+    return () => { isMounted = false; };
   }, []);
 
-  const initials = useMemo(
-    () =>
-      profile.fullName
-        .split(' ')
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0])
-        .join('')
-        .toUpperCase(),
-    [profile.fullName],
-  );
+  const initials = useMemo(() =>
+    profile.fullName.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase(),
+    [profile.fullName]);
 
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-    setDraft((current) => ({ ...current, [name]: value }));
+  const handleChange = e => {
+    const { name, value } = e.target;
+    setDraft(c => ({ ...c, [name]: value }));
   };
 
   const saveProfile = async (keys) => {
-    const nextProfile = keys.reduce(
-      (updated, key) => ({
-        ...updated,
-        [key]: typeof draft[key] === 'string' ? draft[key].trim() : draft[key],
-      }),
-      { ...profile },
-    );
-    if (keys.includes('password') && nextProfile.password) {
-      nextProfile.passwordSet = true;
-    }
-
-    const storedUser = readJson('user', {}) || {};
-    const storedOnboarding = readJson('lifetwinOnboardingProfile', {}) || {};
-    const nextLinks = {
-      linkedin: nextProfile.linkedin,
-      github: nextProfile.github,
-      portfolio: nextProfile.portfolio,
-      fitband: nextProfile.fitband,
-      banking: nextProfile.banking,
-    };
-
-    localStorage.setItem(
-      'user',
-      JSON.stringify({
-        ...storedUser,
-        fullName: nextProfile.fullName,
-        name: nextProfile.fullName,
-        email: nextProfile.email,
-        phone: nextProfile.phone,
-        dob: nextProfile.dob,
-        password: nextProfile.password,
-        links: nextLinks,
-        passwordSet: nextProfile.passwordSet,
-      }),
-    );
-    localStorage.setItem(
-      'lifetwinOnboardingProfile',
-      JSON.stringify({ ...storedOnboarding, phone: nextProfile.phone, dob: nextProfile.dob, links: nextLinks }),
-    );
-
+    const next = keys.reduce((u, k) => ({ ...u, [k]: typeof draft[k] === 'string' ? draft[k].trim() : draft[k] }), { ...profile });
+    if (keys.includes('password') && next.password) next.passwordSet = true;
+    localStorage.setItem('user', JSON.stringify({ ...readJson('user', {}), ...next }));
     try {
       const token = localStorage.getItem('authToken');
       if (token && !keys.includes('password')) {
-        await axios.put(
-          `${API_BASE_URL}/api/auth/profile`,
-          {
-            email: nextProfile.email,
-            phone: nextProfile.phone,
-            dob: nextProfile.dob,
-            links: nextLinks,
-          },
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
+        await axios.put(`${API_BASE_URL}/api/auth/profile`, { email: next.email, phone: next.phone, dob: next.dob }, { headers: { Authorization: `Bearer ${token}` } });
       }
-
-      setProfile(nextProfile);
-      setDraft(nextProfile);
-      setEditing('');
-      setSavedMessage(keys.includes('password') ? 'Password display updated' : 'Changes saved');
-      window.setTimeout(() => setSavedMessage(''), 2200);
-    } catch (error) {
-      console.warn('Settings save fallback:', error.response?.data?.message || error.message);
-      setSavedMessage('Saved locally');
-      setProfile(nextProfile);
-      setDraft(nextProfile);
-      setEditing('');
-      window.setTimeout(() => setSavedMessage(''), 2200);
+      setProfile(next); setDraft(next); setEditing('');
+      showToast(keys.includes('password') ? 'Password updated' : 'Changes saved');
+    } catch {
+      setProfile(next); setDraft(next); setEditing('');
+      showToast('Saved locally');
     }
   };
 
-  const startEdit = (key) => {
-    setDraft(profile);
-    setEditing(key);
-  };
-
-  const cancelEdit = () => {
-    setDraft(profile);
-    setEditing('');
-  };
-
-  const handleLogout = async () => {
-    await dispatch(logoutUser());
-    navigate('/', { replace: true });
-  };
+  const showToast = (msg) => { setSavedMessage(msg); window.setTimeout(() => setSavedMessage(''), 2400); };
 
   const handleTwinAssistantToggle = async () => {
-    const nextEnabled = !settings.twinAssistantEnabled;
-    const optimisticSettings = { ...settings, twinAssistantEnabled: nextEnabled };
-    setSettings(optimisticSettings);
-
+    const next = { ...settings, twinAssistantEnabled: !settings.twinAssistantEnabled };
+    setSettings(next);
     try {
-      const savedSettings = await updateSettings({ twinAssistantEnabled: nextEnabled });
-      setSettings(savedSettings);
+      const saved = await updateSettings({ twinAssistantEnabled: next.twinAssistantEnabled });
+      setSettings(saved);
       window.dispatchEvent(new Event('twin-assistant-settings-updated'));
-      setSavedMessage(nextEnabled ? 'Twin Assistant enabled' : 'Twin Assistant disabled');
-    } catch (error) {
-      setSettings(settings);
-      setSavedMessage('Assistant setting could not be saved');
-      console.warn('Twin Assistant setting save failed:', error.response?.data?.message || error.message);
-    } finally {
-      window.setTimeout(() => setSavedMessage(''), 2200);
-    }
+      showToast(next.twinAssistantEnabled ? 'Twin Assistant enabled' : 'Twin Assistant disabled');
+    } catch { setSettings(settings); showToast('Could not save assistant setting'); }
   };
+
+  const handleLogout = async () => { await dispatch(logoutUser()); navigate('/', { replace: true }); };
 
   return (
     <div className="min-h-[calc(100vh-112px)] bg-[#05070d] px-4 py-6 text-white sm:px-6 lg:px-8">
       <div className="pointer-events-none fixed inset-0 left-[20rem] bg-[radial-gradient(circle_at_16%_0%,rgba(255,122,0,0.12),transparent_28%),radial-gradient(circle_at_86%_12%,rgba(16,199,161,0.10),transparent_30%),linear-gradient(135deg,rgba(123,97,255,0.08),transparent_34%)]" />
 
       <div className="relative mx-auto max-w-7xl space-y-6">
+
+        {/* ── Hero header ── */}
         <section className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-[#080d15]/95 p-6 shadow-[0_24px_70px_-36px_rgba(0,0,0,0.85)] sm:p-8">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_18%,rgba(255,122,0,0.18),transparent_30%),radial-gradient(circle_at_90%_15%,rgba(123,97,255,0.18),transparent_28%),linear-gradient(135deg,rgba(255,255,255,0.06),transparent_38%)]" />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_10%_18%,rgba(255,122,0,0.18),transparent_30%),radial-gradient(circle_at_90%_15%,rgba(123,97,255,0.18),transparent_28%)]" />
           <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
               <div className="grid h-24 w-24 shrink-0 place-items-center rounded-[1.5rem] border border-white/15 bg-gradient-to-br from-[#ff7a00] via-[#ff007f] to-[#7b61ff] p-[2px] shadow-[0_18px_45px_-24px_rgba(255,0,127,0.95)]">
-                <div className="grid h-full w-full place-items-center rounded-[calc(1.5rem-2px)] bg-[#080d15] text-3xl font-black">
-                  {initials || 'DT'}
-                </div>
+                <div className="grid h-full w-full place-items-center rounded-[calc(1.5rem-2px)] bg-[#080d15] text-3xl font-black">{initials || 'DT'}</div>
               </div>
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#7df3cc]/70">Settings</p>
                 <h2 className="mt-2 text-3xl font-black tracking-tight sm:text-5xl">{profile.fullName}</h2>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-white/60">
-                  Manage your profile details, connected platforms, support options, and secure session.
-                </p>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-white/60">Profile, integrations, assistant, and session controls.</p>
               </div>
             </div>
-
             {savedMessage && (
               <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#10c7a1]/25 bg-[#10c7a1]/12 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[#7df3cc]">
-                <Check className="h-4 w-4" />
-                {savedMessage}
+                <Check className="h-4 w-4" />{savedMessage}
               </span>
             )}
           </div>
@@ -308,23 +258,20 @@ function Settings() {
 
         <div className="space-y-6">
           <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-            <main className="h-full">
+            <main>
               <SettingsSection icon={UserRound} eyebrow="Profile" title="Profile Details" className="h-full">
                 <div className="grid gap-4 md:grid-cols-2">
-                  <ReadOnlyCard icon={UserRound} label="Full name" value={profile.fullName || 'Not set'} />
-                  <ReadOnlyCard icon={CalendarDays} label="Date of birth" value={profile.dob || 'Not set'} />
+                  <ReadOnlyCard icon={UserRound}    label="Full name"     value={profile.fullName || 'Not set'} />
+                  <ReadOnlyCard icon={CalendarDays} label="Date of birth" value={profile.dob      || 'Not set'} />
                 </div>
-
                 <div className="mt-4 grid gap-4 lg:grid-cols-3">
-                  {editableFields.map((field) => (
-                    <EditableCard
-                      key={field.key}
-                      field={field}
+                  {editableFields.map(field => (
+                    <EditableCard key={field.key} field={field}
                       value={draft[field.key]}
                       displayValue={field.key === 'password' ? maskPassword(profile.passwordSet || profile.password) : profile[field.key]}
                       isEditing={editing === field.key}
-                      onEdit={() => startEdit(field.key)}
-                      onCancel={cancelEdit}
+                      onEdit={() => { setDraft(profile); setEditing(field.key); }}
+                      onCancel={() => { setDraft(profile); setEditing(''); }}
                       onChange={handleChange}
                       onSave={() => saveProfile([field.key])}
                     />
@@ -332,70 +279,63 @@ function Settings() {
                 </div>
               </SettingsSection>
             </main>
-
-            <aside className="h-full">
+            <aside>
               <SettingsSection icon={CircleHelp} eyebrow="Help" title="Help And Support" className="h-full">
                 <div className="space-y-3">
-                  <SupportRow title="Contact support" copy="Get help with your account, profile data, or connected links." />
-                  <SupportRow title="Security help" copy="Review sign-in and password guidance for your Digital Twin account." />
-                  <a
-                    href="mailto:support@digitaltwin.app"
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#10c7a1]/25 bg-[#10c7a1]/10 px-4 py-3 text-sm font-black text-[#7df3cc] transition hover:bg-[#10c7a1]/15"
-                  >
-                    <Mail className="h-4 w-4" />
-                    Email Support
+                  <SupportRow title="Contact support"  copy="Get help with your account, profile data, or connected links." />
+                  <SupportRow title="Security help"    copy="Review sign-in and password guidance for your Digital Twin account." />
+                  <a href="mailto:support@digitaltwin.app"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#10c7a1]/25 bg-[#10c7a1]/10 px-4 py-3 text-sm font-black text-[#7df3cc] transition hover:bg-[#10c7a1]/15">
+                    <Mail className="h-4 w-4" />Email Support
                   </a>
                 </div>
               </SettingsSection>
             </aside>
           </div>
 
-          <SettingsSection icon={ExternalLink} eyebrow="Platform" title="Connected Links">
+          {/* ── INTEGRATIONS ── */}
+          <SettingsSection icon={Wifi} eyebrow="Integrations" title="Connected Integrations">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="text-sm text-white/50">
+                Connect your accounts once — data flows to Dashboard, Health, Career, and Finance automatically.
+              </p>
+              <button onClick={refreshIntegrations} disabled={intLoading}
+                className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/50 transition hover:bg-white/8 hover:text-white disabled:opacity-40">
+                <RefreshCw className={`h-3.5 w-3.5 ${intLoading ? 'animate-spin' : ''}`} />
+                Refresh all
+              </button>
+            </div>
             <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-              {platformFields.map((field) => (
-                <EditableCard
-                  key={field.key}
-                  field={{ ...field, type: 'url' }}
-                  value={draft[field.key]}
-                  displayValue={profile[field.key]}
-                  isEditing={editing === field.key}
-                  onEdit={() => startEdit(field.key)}
-                  onCancel={cancelEdit}
-                  onChange={handleChange}
-                  onSave={() => saveProfile([field.key])}
+              {INTEGRATIONS.map(def => (
+                <IntegrationCard
+                  key={def.key}
+                  def={def}
+                  state={integrations[def.key] || { status: 'disconnected' }}
+                  onConnect={(payload) => { saveIntegration(def.key, payload); showToast(`${def.label} connected`); }}
+                  onDisconnect={() => { disconnectIntegration(def.key); showToast(`${def.label} disconnected`); }}
                 />
               ))}
             </div>
           </SettingsSection>
 
+          {/* ── Twin Assistant ── */}
           <SettingsSection icon={Bot} eyebrow="Voice Control" title="Twin Assistant">
             <div className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.045] p-5 sm:flex-row sm:items-center sm:justify-between">
               <div className="max-w-3xl">
                 <h4 className="text-xl font-black text-white">Twin Assistant</h4>
                 <p className="mt-2 text-sm leading-6 text-white/56">
-                  Enable or disable the Twin Voice Assistant. When enabled, users can control parts of the application using voice commands. When disabled, all actions must be performed manually.
+                  Enable voice commands to control the app. When disabled, all actions must be performed manually.
                 </p>
               </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={settings.twinAssistantEnabled}
+              <button type="button" role="switch" aria-checked={settings.twinAssistantEnabled}
                 onClick={handleTwinAssistantToggle}
-                className={`relative h-9 w-16 shrink-0 rounded-full border p-1 transition ${
-                  settings.twinAssistantEnabled
-                    ? 'border-[#10c7a1]/45 bg-[#10c7a1]'
-                    : 'border-white/12 bg-white/10'
-                }`}
-              >
-                <span
-                  className={`block h-7 w-7 rounded-full bg-white shadow-lg transition ${
-                    settings.twinAssistantEnabled ? 'translate-x-7' : 'translate-x-0'
-                  }`}
-                />
+                className={`relative h-9 w-16 shrink-0 rounded-full border p-1 transition ${settings.twinAssistantEnabled ? 'border-[#10c7a1]/45 bg-[#10c7a1]' : 'border-white/12 bg-white/10'}`}>
+                <span className={`block h-7 w-7 rounded-full bg-white shadow-lg transition ${settings.twinAssistantEnabled ? 'translate-x-7' : 'translate-x-0'}`} />
               </button>
             </div>
           </SettingsSection>
 
+          {/* ── Logout ── */}
           <section className="mx-auto max-w-2xl rounded-[1.5rem] border border-[#ff007f]/25 bg-[#0b111a]/92 p-5 text-center shadow-[0_20px_60px_-36px_rgba(0,0,0,0.9)] backdrop-blur-xl sm:p-6">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-[#ff007f]/25 bg-[#ff007f]/10 text-[#ff8fbd]">
               <ShieldCheck className="h-6 w-6" />
@@ -403,13 +343,9 @@ function Settings() {
             <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#ff8fbd]/75">Logout</p>
             <h3 className="mt-2 text-2xl font-black tracking-tight">End Session</h3>
             <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-white/50">Securely close this account session.</p>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="mx-auto mt-5 inline-flex w-full max-w-md items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#ff7a00] via-[#ff007f] to-[#7b61ff] px-5 py-3 text-sm font-black text-white shadow-[0_20px_50px_-25px_rgba(255,0,127,0.9)] transition hover:-translate-y-0.5"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
+            <button type="button" onClick={handleLogout}
+              className="mx-auto mt-5 inline-flex w-full max-w-md items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#ff7a00] via-[#ff007f] to-[#7b61ff] px-5 py-3 text-sm font-black text-white shadow-[0_20px_50px_-25px_rgba(255,0,127,0.9)] transition hover:-translate-y-0.5">
+              <LogOut className="h-4 w-4" />Logout
             </button>
           </section>
         </div>
@@ -418,6 +354,165 @@ function Settings() {
   );
 }
 
+// ─── IntegrationCard ─────────────────────────────────────────────────────────
+function IntegrationCard({ def, state, onConnect, onDisconnect }) {
+  const [expanded,    setExpanded]    = useState(false);
+  const [inputValue,  setInputValue]  = useState('');
+  const [connecting,  setConnecting]  = useState(false);
+  const [inputError,  setInputError]  = useState('');
+
+  const connected = state.status === 'connected';
+  const Icon = def.icon;
+
+  const handleConnect = async () => {
+    if (!inputValue.trim()) { setInputError(`Enter your ${def.fieldLabel.toLowerCase()}`); return; }
+    setInputError('');
+    setConnecting(true);
+    try {
+      await onConnect({ [def.fieldKey]: inputValue.trim() });
+      setExpanded(false);
+      setInputValue('');
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  // Build stats chips when connected and data exists
+  const stats = def.statsKeys
+    .map((k, i) => ({ label: def.statsLabels[i], value: state.data?.[k] }))
+    .filter(s => s.value !== undefined && s.value !== null);
+
+  return (
+    <div
+      className="flex flex-col rounded-2xl border bg-white/[0.03] transition-all duration-200"
+      style={{
+        borderColor: connected ? def.border : 'rgba(255,255,255,0.08)',
+        backgroundColor: connected ? def.accent : undefined,
+      }}
+    >
+      {/* ── Top row ── */}
+      <div className="flex items-start gap-3 p-4">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+          style={{ borderColor: def.border, backgroundColor: def.accent }}>
+          <Icon className="h-5 w-5" style={{ color: def.color }} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="text-sm font-black text-white">{def.label}</h4>
+            {connected ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#10c7a1]/30 bg-[#10c7a1]/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-[#10c7a1]">
+                <CheckCircle2 className="h-2.5 w-2.5" />Connected
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white/35">
+                <WifiOff className="h-2.5 w-2.5" />Not connected
+              </span>
+            )}
+          </div>
+
+          {/* Pages this affects */}
+          <div className="mt-1 flex flex-wrap gap-1">
+            {def.pages.map(p => (
+              <span key={p} className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white/30 bg-white/5 border border-white/8">
+                {p}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Expand / collapse */}
+        <button onClick={() => setExpanded(e => !e)}
+          className="shrink-0 h-7 w-7 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center text-white/40 hover:text-white transition-colors">
+          {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </button>
+      </div>
+
+      {/* ── Stats row (when connected and data exists) ── */}
+      {connected && stats.length > 0 && (
+        <div className="mx-4 mb-3 grid grid-cols-3 gap-2 rounded-xl border border-white/8 bg-black/20 p-3">
+          {stats.map(s => (
+            <div key={s.label} className="text-center">
+              <p className="text-[9px] font-bold uppercase tracking-wider text-white/35">{s.label}</p>
+              <p className="mt-0.5 text-sm font-black text-white">{typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Connected identity ── */}
+      {connected && (state.username || state.profileLink || state.url) && (
+        <div className="mx-4 mb-3 flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
+          <span className="text-xs text-white/50 truncate max-w-[70%]">
+            {state.username || state.profileLink || state.url}
+          </span>
+          <button onClick={onDisconnect}
+            className="text-[10px] font-bold text-[#ff4d7d]/70 hover:text-[#ff4d7d] transition-colors underline underline-offset-2">
+            Disconnect
+          </button>
+        </div>
+      )}
+
+      {/* ── Expanded connect form ── */}
+      {expanded && (
+        <div className="border-t border-white/8 p-4 space-y-3">
+          <p className="text-xs text-white/45 leading-relaxed">{def.description}</p>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider mb-1.5"
+              style={{ color: def.color }}>
+              {def.fieldLabel}
+            </label>
+            <input
+              type="text"
+              value={inputValue}
+              onChange={e => { setInputValue(e.target.value); setInputError(''); }}
+              onKeyDown={e => e.key === 'Enter' && handleConnect()}
+              placeholder={def.placeholder}
+              className="h-11 w-full rounded-xl border border-white/10 bg-[#080d15] px-4 text-sm font-semibold text-white outline-none placeholder:text-white/20 focus:border-white/25 transition-colors"
+            />
+            {inputError && (
+              <p className="mt-1.5 flex items-center gap-1 text-[11px] text-[#ff4d7d]">
+                <AlertCircle className="h-3 w-3" />{inputError}
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={handleConnect} disabled={connecting}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-black text-[#05070d] transition hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: def.color }}>
+              {connecting
+                ? <><Loader2 className="h-4 w-4 animate-spin" />Connecting…</>
+                : <><Wifi className="h-4 w-4" />Connect</>}
+            </button>
+            <button onClick={() => { setExpanded(false); setInputValue(''); setInputError(''); }}
+              className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white/50 hover:bg-white/8 transition-colors">
+              Cancel
+            </button>
+          </div>
+
+          {connected && (
+            <button onClick={onDisconnect}
+              className="w-full rounded-xl border border-[#ff4d7d]/20 bg-[#ff4d7d]/8 py-2 text-sm font-bold text-[#ff4d7d] hover:bg-[#ff4d7d]/15 transition-colors">
+              Disconnect {def.label}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Call-to-action when collapsed and not connected ── */}
+      {!expanded && !connected && (
+        <button onClick={() => setExpanded(true)}
+          className="mx-4 mb-4 rounded-xl border border-white/8 bg-white/4 py-2 text-xs font-bold text-white/40 hover:bg-white/8 hover:text-white/70 transition-all">
+          + Connect {def.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Shared sub-components (unchanged from original) ──────────────────────────
 function SettingsSection({ icon: Icon, eyebrow, title, children, className = '' }) {
   return (
     <section className={`rounded-[1.5rem] border border-white/10 bg-[#0b111a]/92 p-5 shadow-[0_20px_60px_-36px_rgba(0,0,0,0.9)] backdrop-blur-xl sm:p-6 ${className}`}>
@@ -439,8 +534,7 @@ function ReadOnlyCard({ icon: Icon, label, value }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
       <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-white/40">
-        <Icon className="h-4 w-4 text-[#7df3cc]" />
-        {label}
+        <Icon className="h-4 w-4 text-[#7df3cc]" />{label}
       </div>
       <p className="min-h-7 break-words text-base font-black text-white">{value}</p>
     </div>
@@ -449,58 +543,37 @@ function ReadOnlyCard({ icon: Icon, label, value }) {
 
 function EditableCard({ field, value, displayValue, isEditing, onEdit, onCancel, onChange, onSave }) {
   const Icon = field.icon;
-
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4 transition focus-within:border-[#10c7a1]/45 focus-within:bg-white/[0.07]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <label className="min-w-0 flex-1">
           <span className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-white/40">
-            <Icon className="h-4 w-4 text-[#7df3cc]" />
-            {field.label}
+            <Icon className="h-4 w-4 text-[#7df3cc]" />{field.label}
           </span>
           {isEditing ? (
-            <input
-              name={field.key}
-              type={field.type}
-              value={value}
-              onChange={onChange}
-              placeholder={field.placeholder}
-              autoComplete={field.key === 'password' ? 'new-password' : 'off'}
-              className="h-12 w-full rounded-xl border border-white/10 bg-[#080d15] px-4 text-sm font-semibold text-white outline-none placeholder:text-white/25 focus:border-[#10c7a1]/55"
-            />
+            <input name={field.key} type={field.type} value={value} onChange={onChange}
+              placeholder={field.placeholder} autoComplete={field.key === 'password' ? 'new-password' : 'off'}
+              className="h-12 w-full rounded-xl border border-white/10 bg-[#080d15] px-4 text-sm font-semibold text-white outline-none placeholder:text-white/25 focus:border-[#10c7a1]/55" />
           ) : (
             <p className="min-h-12 break-words rounded-xl border border-transparent py-3 text-base font-black text-white/88">
               {displayValue || 'Not set'}
             </p>
           )}
         </label>
-
         {isEditing ? (
           <div className="flex shrink-0 gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.055] text-white/62 transition hover:bg-white/10 hover:text-white"
-              aria-label={`Cancel ${field.label} edit`}
-            >
+            <button type="button" onClick={onCancel} aria-label={`Cancel ${field.label} edit`}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.055] text-white/62 transition hover:bg-white/10 hover:text-white">
               <X className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={onSave}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#10c7a1] text-[#06110f] transition hover:bg-[#7df3cc]"
-              aria-label={`Save ${field.label}`}
-            >
+            <button type="button" onClick={onSave} aria-label={`Save ${field.label}`}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#10c7a1] text-[#06110f] transition hover:bg-[#7df3cc]">
               <Save className="h-4 w-4" />
             </button>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={onEdit}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.055] text-white/62 transition hover:bg-white/10 hover:text-white"
-            aria-label={`Edit ${field.label}`}
-          >
+          <button type="button" onClick={onEdit} aria-label={`Edit ${field.label}`}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.055] text-white/62 transition hover:bg-white/10 hover:text-white">
             <Pencil className="h-4 w-4" />
           </button>
         )}
@@ -518,8 +591,6 @@ function SupportRow({ title, copy }) {
   );
 }
 
-function maskPassword(password) {
-  return password ? '........' : 'Not set';
-}
+function maskPassword(password) { return password ? '........' : 'Not set'; }
 
 export default Settings;

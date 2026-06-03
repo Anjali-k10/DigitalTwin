@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useGamification } from '../context/GamificationContext';
-import { Activity, CreditCard, Github, CheckCircle, Loader2, Link2, RefreshCw } from 'lucide-react';
+import { Activity, CreditCard, GitBranch, CheckCircle, Loader2, Link2, RefreshCw } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 const glassCardClass = 'rounded-2xl border border-white/10 bg-[#0f1320]/84 shadow-[0_20px_60px_rgba(0,0,0,0.42)] backdrop-blur-xl p-6 transition-all hover:border-white/20';
@@ -76,7 +76,7 @@ export default function Integrations() {
           {/* Career Integration Card */}
           <IntegrationCard 
             title="GitHub & LinkedIn" 
-            icon={Github} 
+            icon={GitBranch} 
             color="#c8a84b"
             domain="career"
             isLoading={loading.career}
