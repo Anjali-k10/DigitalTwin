@@ -8,12 +8,13 @@ import {
 } from 'recharts';
 import {
   BadgeDollarSign, Bell, Briefcase, CalendarDays, CheckCircle2,
-  ChevronRight, HeartPulse, Search, Sparkles, Target, TrendingUp,
-  Flame, Brain, Activity, ArrowUpRight, Wallet, Share2, 
-  MessageCircle, Camera, Send, Lock, Trophy, Map 
+  ChevronRight, HeartPulse, Search, Target,
+  Flame, Brain, Activity, ArrowUpRight, Wallet,
+  MessageCircle, Camera, Send, Lock, Trophy,
 } from 'lucide-react';
 import { useGamification } from '../context/GamificationContext';
 import { useIntegrations } from '../context/IntegrationContext';
+import useNotificationCount from '../hooks/useNotificationCount';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -66,6 +67,8 @@ function Dashboard() {
       finally { setIsLoadingDashboard(false); }
     };
     fetchDashboard();
+    window.addEventListener('daily-update-completed', fetchDashboard);
+    return () => window.removeEventListener('daily-update-completed', fetchDashboard);
   }, []);
 
   return (
@@ -92,7 +95,7 @@ function Dashboard() {
 
             {/* ── HERO ── */}
             <motion.div variants={itemVariants}>
-              <HeroSection firstName={firstName} insights={insights} today={today} isLoading={isLoadingDashboard} navigate={navigate} />
+              <HeroSection firstName={firstName} insights={insights} isLoading={isLoadingDashboard} navigate={navigate} />
             </motion.div>
 
             {/* ── ROW 1: Score Cards ── */}
@@ -327,7 +330,7 @@ function GamifiedJourneyMap({ totalXP, level, history, unlockedBadges, available
               { id: 'fitbit', icon: '🏃', yOffset: 'translate-y-8' },
               { id: 'linkedin', icon: '🔗', yOffset: 'translate-y-2' },
               { id: 'banking', icon: '🏦', yOffset: '-translate-y-6' }
-            ].map((node, i) => {
+            ].map((node) => {
               const connected = isConnected(node.id);
               const isTargeted = activeFilter === node.id || activeFilter === 'all';
               return (
@@ -430,6 +433,8 @@ function GamifiedJourneyMap({ totalXP, level, history, unlockedBadges, available
 
 // ─── Header ─────────────────────────────────────────────────────────────────
 function DashboardHeader({ today, firstName, onSearchClick, onNotificationClick }) {
+  const unreadNotificationCount = useNotificationCount();
+
   return (
     <motion.header
       className="flex shrink-0 items-center justify-between border-b border-white/8 bg-[#070a10]/80 px-4 py-3.5 backdrop-blur-xl lg:px-8"
@@ -459,7 +464,11 @@ function DashboardHeader({ today, firstName, onSearchClick, onNotificationClick 
           className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/60 transition hover:bg-white/10 hover:text-white"
         >
           <Bell className="h-4 w-4" />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#ff4d7d] shadow-[0_0_6px_rgba(255,77,125,0.8)]" />
+          {unreadNotificationCount > 0 && (
+            <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full border border-[#070a10] bg-[#ef4444] px-1 text-[10px] font-black leading-none text-white shadow-[0_0_12px_rgba(239,68,68,0.75)]">
+              {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+            </span>
+          )}
         </button>
         <div className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-gradient-to-br from-[#7b61ff] to-[#10c7a1] text-sm font-bold text-white shadow-[0_0_12px_rgba(16,199,161,0.25)]">
           {firstName.slice(0, 1).toUpperCase()}
@@ -469,7 +478,7 @@ function DashboardHeader({ today, firstName, onSearchClick, onNotificationClick 
   );
 }
 
-function HeroSection({ firstName, insights, today, isLoading, navigate }) {
+function HeroSection({ firstName, insights, isLoading, navigate }) {
   const alignmentColor = insights.burnoutRisk > 70 ? '#ff4d7d' : insights.financeScore < 40 ? '#c8a84b' : '#10c7a1';
 
   return (
@@ -480,10 +489,6 @@ function HeroSection({ firstName, insights, today, isLoading, navigate }) {
 
         <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">
-              <Sparkles className="h-3 w-3 text-[#c8a84b]" />
-              Premium Control Room · {today}
-            </div>
             <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
               Good morning, {firstName}.
             </h1>
@@ -537,22 +542,25 @@ function StatusPill({ icon, label, value, colorState }) {
   );
 }
 
-function ScoreCard({ title, value, icon: Icon, emoji, colorState, subtitle, onClick }) {
+function ScoreCard({ title, value, emoji, colorState, subtitle, onClick }) {
   const c = colorStateToHex(colorState);
-  const bg = colorStateToBg(colorState);
   const [displayed, setDisplayed] = useState(value);
 
   useEffect(() => {
-    const duration = 900;
-    const start = performance.now();
-    const tick = (ts) => {
-      const p = Math.min((ts - start) / duration, 1);
-      const e = 1 - Math.pow(1 - p, 3);
-      setDisplayed(Math.round(value * e));
-      if (p < 1) requestAnimationFrame(tick);
-    };
-    setDisplayed(0);
-    requestAnimationFrame(tick);
+    let frameId;
+    window.setTimeout(() => {
+      const duration = 900;
+      const start = performance.now();
+      const tick = (ts) => {
+        const p = Math.min((ts - start) / duration, 1);
+        const e = 1 - Math.pow(1 - p, 3);
+        setDisplayed(Math.round(value * e));
+        if (p < 1) frameId = requestAnimationFrame(tick);
+      };
+      setDisplayed(0);
+      frameId = requestAnimationFrame(tick);
+    }, 0);
+    return () => cancelAnimationFrame(frameId);
   }, [value]);
 
   return (
@@ -751,22 +759,6 @@ function LifeBalanceRadar({ insights }) {
     { subject: 'Resilience', A: 100 - insights.burnoutRisk, emoji: '🛡️', color: '#f472b6', desc: 'Inverse burnout index' },
   ];
 
-  const CustomTooltip = ({ active, payload }) => {
-    if (!active || !payload?.length) return null;
-    const entry = data.find(d => d.subject === payload[0]?.payload?.subject);
-    if (!entry) return null;
-    return (
-      <div className="rounded-xl border border-white/10 bg-[#0a0e17]/95 px-3.5 py-2.5 backdrop-blur-xl text-left" style={{ boxShadow: `0 0 18px ${entry.color}30` }}>
-        <div className="flex items-center gap-1.5 mb-1">
-          <span>{entry.emoji}</span>
-          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: entry.color }}>{entry.subject}</span>
-        </div>
-        <p className="text-xl font-bold text-white">{entry.A}<span className="text-sm font-normal text-white/45 ml-0.5">%</span></p>
-        <p className="mt-0.5 text-[10px] text-white/40">{entry.desc}</p>
-      </div>
-    );
-  };
-
   return (
     <motion.article whileHover={{ y: -3 }} className="flex flex-col rounded-[1.5rem] border border-white/10 bg-white/[0.02] p-5 backdrop-blur-xl">
       <div className="mb-4 flex items-center justify-between">
@@ -786,7 +778,7 @@ function LifeBalanceRadar({ insights }) {
                 return <text x={x} y={y} textAnchor="middle" dominantBaseline="central" fill={entry?.color || 'rgba(255,255,255,0.45)'} fontSize={9.5} fontWeight={700} letterSpacing="0.08em">{payload.value}</text>;
               }} />
               <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-              <RechartsTooltip content={<CustomTooltip />} />
+              <RechartsTooltip content={<LifeBalanceTooltip data={data} />} />
               <Radar name="Score" dataKey="A" stroke="#7b61ff" strokeWidth={2} fill="rgba(123,97,255,0.13)" dot={{ r: 4, fill: '#7b61ff', stroke: 'rgba(123,97,255,0.35)', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#7b61ff', stroke: 'white', strokeWidth: 2 }} />
             </RadarChart>
           </ResponsiveContainer>
@@ -812,6 +804,22 @@ function LifeBalanceRadar({ insights }) {
         </div>
       </div>
     </motion.article>
+  );
+}
+
+function LifeBalanceTooltip({ active, payload, data }) {
+  if (!active || !payload?.length) return null;
+  const entry = data.find(d => d.subject === payload[0]?.payload?.subject);
+  if (!entry) return null;
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#0a0e17]/95 px-3.5 py-2.5 backdrop-blur-xl text-left" style={{ boxShadow: `0 0 18px ${entry.color}30` }}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <span>{entry.emoji}</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: entry.color }}>{entry.subject}</span>
+      </div>
+      <p className="text-xl font-bold text-white">{entry.A}<span className="text-sm font-normal text-white/45 ml-0.5">%</span></p>
+      <p className="mt-0.5 text-[10px] text-white/40">{entry.desc}</p>
+    </div>
   );
 }
 
@@ -1040,10 +1048,6 @@ function colorStateToHex(state) {
   const n = normalizeColorState(state);
   return n === 'green' ? '#10c7a1' : n === 'orange' ? '#c8a84b' : '#ff4d7d';
 }
-function colorStateToBg(state) {
-  const n = normalizeColorState(state);
-  return n === 'green' ? 'rgba(16,199,161,0.08)' : n === 'orange' ? 'rgba(200,168,75,0.08)' : 'rgba(255,77,125,0.08)';
-}
 function getVisualState(colorState = 'green') {
   const n = normalizeColorState(colorState);
   const states = {
@@ -1251,20 +1255,23 @@ function buildRitualCalendar(date, insights) {
   const year = date.getFullYear(); const month = date.getMonth(); const today = date.getDate();
   const daysInMonth = new Date(year, month + 1, 0).getDate(); const firstDay = new Date(year, month, 1).getDay();
   const streak = insights.streak || normalizeStreak();
-  const completedDates = new Set(streak.completedDailyGoals.map(e => e.date));
+  const completedDates = new Set(streak.completedDailyGoals.filter(e => e.goalCompleted !== false).map(e => e.date));
+  const missedDates = new Set(streak.completedDailyGoals.filter(e => e.goalCompleted === false).map(e => e.date));
   const blanks = Array.from({ length: firstDay }, (_, i) => ({ key: `b-${i}`, type: 'blank' }));
   const days = Array.from({ length: daysInMonth }, (_, i) => {
     const value = i + 1; const isToday = value === today; const isFuture = value > today;
     const completed = completedDates.has(formatDateKey(year, month, value));
-    return { key: `d-${value}`, type: 'day', value, state: isToday && completed ? 'today-complete' : isToday ? 'today' : isFuture ? 'future' : completed ? 'done' : streak.streakStarted ? 'missed' : 'empty' };
+    const missed = missedDates.has(formatDateKey(year, month, value));
+    return { key: `d-${value}`, type: 'day', value, state: isToday && completed ? 'today-complete' : isToday && missed ? 'missed' : isToday ? 'today' : isFuture ? 'future' : completed ? 'done' : missed || streak.streakStarted ? 'missed' : 'empty' };
   });
   return { today, monthShort: new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date), currentStreak: streak.currentStreak, streakStarted: streak.streakStarted, days: [...blanks, ...days] };
 }
 
-function normalizeStreak(r = {}) { return { currentStreak: Number(r.currentStreak || 0), streakStarted: Boolean(r.streakStarted), lastGoalCompletionDate: r.lastGoalCompletionDate || '', completedDailyGoals: Array.isArray(r.completedDailyGoals) ? r.completedDailyGoals : [] }; }
+function normalizeStreak(r = {}) { return { currentStreak: Number(r.currentStreak || 0), streakStarted: Boolean(r.streakStarted), lastGoalCompletionDate: r.lastGoalCompletionDate || '', completedDailyGoals: Array.isArray(r.completedDailyGoals) ? r.completedDailyGoals.map(e => ({ ...e, goalCompleted: e.goalCompleted !== false })) : [] }; }
 function formatDateKey(y, m, d) { return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`; }
 function formatTimeLeft(date) { const end = new Date(date); end.setHours(23, 59, 59, 999); const s = Math.max(0, Math.floor((end - date) / 1000)); return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map(v => String(v).padStart(2, '0')).join(':'); }
 function formatMoney(v) { return Number.isNaN(v) ? 'Add data' : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v); }
 function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
 
 export default Dashboard;
+

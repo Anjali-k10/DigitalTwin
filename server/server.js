@@ -19,9 +19,11 @@ import assistantRoutes from './routes/assistantRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
+import dailyUpdateRoutes, { streakRouter } from './routes/dailyUpdateRoutes.js';
 import integrationRoutes from './routes/integrationRoutes.js'; 
 
 import { startCaretakerJobs } from './cron/caretaker.js';
+import { initializeSocketServer } from './services/socketService.js';
 
 // Initialize Express app
 const app = express();
@@ -75,6 +77,8 @@ app.use('/api/simulation', simulationRoutes);
 app.use('/api/assistant', assistantRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/daily-update', dailyUpdateRoutes);
+app.use('/api/streak', streakRouter);
 
 app.use('/api/integrations', integrationRoutes);
 
@@ -118,6 +122,8 @@ const server = app.listen(PORT, () => {
 ═══════════════════════════════════════════
 `);
 });
+
+await initializeSocketServer(server);
 
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') {

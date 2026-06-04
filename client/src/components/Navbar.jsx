@@ -1,4 +1,5 @@
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import useNotificationCount from '../hooks/useNotificationCount';
 
 const pageTitles = {
   '/dashboard': 'Your Digital Twin dashboard',
@@ -14,9 +15,12 @@ const pageTitles = {
 
 function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const unreadCount = useNotificationCount();
   const user = getStoredUser();
   const firstName = user?.firstName || 'Anjali';
   const pageTitle = pageTitles[location.pathname] || 'DigitalTwin workspace';
+  const greeting = getTimeGreeting();
 
   return (
 <header className="border-b border-violet-500/20 bg-[#1a103d]/90 px-4 py-4 text-white backdrop-blur-xl sm:px-6 lg:px-8">      <div className="relative flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -25,23 +29,30 @@ function Navbar() {
             <span className="h-1.5 w-1.5 rounded-full bg-[#10c7a1] shadow-[0_0_18px_rgba(16,199,161,0.85)]" />
             DigitalTwin workspace
           </div>
-          <p className="text-sm font-semibold tracking-[0.18em] text-white/60">Good evening, {firstName}</p>
+          <p className="text-sm font-semibold tracking-[0.18em] text-white/60">{greeting}, {firstName}</p>
 <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">            <span className="bg-gradient-to-r from-white via-[#9db7ff] to-[#7df3cc] bg-clip-text text-transparent">{pageTitle}</span>
           </h1>
         </div>
 
         <div className="flex items-center gap-3">
           <button
-            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition hover:bg-white/10 hover:text-white"
+            className="relative flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition hover:bg-white/10 hover:text-white"
             type="button"
             aria-label="Notifications"
+            onClick={() => navigate('/notifications')}
           >
             <BellIcon className="h-4 w-4" />
+            {unreadCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border border-[#1a103d] bg-[#ef4444] px-1 text-[10px] font-black leading-none text-white shadow-[0_0_14px_rgba(239,68,68,0.8)]">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </button>
           <button
             className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-gradient-to-br from-[#7b61ff] via-[#1d5fff] to-[#10c7a1] text-sm font-semibold text-white shadow-[0_0_20px_rgba(16,199,161,0.18)]"
             type="button"
             aria-label="Profile"
+            onClick={() => navigate('/settings')}
           >
             {firstName.slice(0, 1).toUpperCase()}
           </button>
@@ -58,6 +69,13 @@ function getStoredUser() {
   } catch {
     return null;
   }
+}
+
+function getTimeGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
 }
 
 function BellIcon({ className }) {

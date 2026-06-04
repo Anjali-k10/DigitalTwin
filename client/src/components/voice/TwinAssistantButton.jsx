@@ -38,9 +38,23 @@ const stateConfig = {
     dotClass: 'bg-[#22d3ee]',
     icon: Mic,
   },
+  speaking: {
+    label: 'Speaking',
+    statusText: 'Speaking...',
+    buttonClass: 'border-[#22d3ee]/45 bg-[#0891b2] text-white shadow-[0_0_38px_-10px_rgba(34,211,238,0.95)]',
+    dotClass: 'bg-[#22d3ee]',
+    icon: Mic,
+  },
 };
 
 const emptyMessages = [];
+
+const voiceStatusText = {
+  offline: 'Voice offline',
+  connecting: 'Connecting voice...',
+  listening: 'Listening',
+  error: 'Voice Assistant Offline',
+};
 
 export default function TwinAssistantButton() {
   const assistant = useTwinAssistant();
@@ -52,12 +66,15 @@ export default function TwinAssistantButton() {
   const messages = assistant?.messages || emptyMessages;
   const assistantState = assistant?.assistantState || 'disabled';
   const assistantMessage = assistant?.assistantMessage || '';
+  const voiceStatus = assistant?.voiceStatus || 'offline';
   const panelOpen = Boolean(assistant?.panelOpen);
   const setPanelOpen = assistant?.setPanelOpen;
   const toggleListening = assistant?.toggleListening;
+  const retryConnection = assistant?.retryConnection;
   const submitTextCommand = assistant?.submitTextCommand;
 
   const config = stateConfig[assistantState] || stateConfig.disabled;
+  const displayLabel = assistantState === 'ready' && voiceStatus === 'listening' ? 'Listening' : config.label;
   const Icon = config.icon;
 
   useEffect(() => {
@@ -89,8 +106,9 @@ export default function TwinAssistantButton() {
                   )}
                   <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${config.dotClass}`} />
                 </span>
-                <span>{config.label}</span>
+                <span>{displayLabel}</span>
               </div>
+              <p className="mt-1 text-xs font-semibold text-white/38">{voiceStatusText[voiceStatus] || voiceStatusText.offline}</p>
             </div>
             <button
               type="button"
@@ -142,10 +160,25 @@ export default function TwinAssistantButton() {
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/36">Live</p>
                   <p className="mt-1 min-h-5 text-white/84">{transcript || assistantMessage || config.statusText}</p>
+                  <p className="mt-2 text-xs leading-5 text-white/48">
+                    Heard: <span className="text-white/78">{transcript ? `"${transcript}"` : 'Waiting for speech...'}</span>
+                  </p>
+                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/32">
+                    {voiceStatusText[voiceStatus] || voiceStatusText.offline}
+                  </p>
                 </div>
                 {assistantState === 'processing' && <ThinkingDots />}
               </div>
               {speechActive && <Waveform />}
+              {voiceStatus === 'error' && (
+                <button
+                  type="button"
+                  onClick={retryConnection}
+                  className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-[#10c7a1]/25 bg-[#10c7a1]/12 px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-[#7df3cc] transition hover:bg-[#10c7a1]/20"
+                >
+                  Retry Connection
+                </button>
+              )}
             </div>
 
             <form onSubmit={handleTextSubmit} className="flex items-center gap-2">
@@ -172,7 +205,7 @@ export default function TwinAssistantButton() {
         type="button"
         onClick={toggleListening}
         className={`inline-flex h-16 w-16 items-center justify-center rounded-2xl border shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)] transition hover:-translate-y-0.5 ${config.buttonClass}`}
-        aria-label={`Twin Assistant ${config.label}`}
+        aria-label={`Twin Assistant ${displayLabel}`}
       >
         <Icon className={`h-7 w-7 ${speechActive ? 'animate-pulse' : ''}`} />
       </button>

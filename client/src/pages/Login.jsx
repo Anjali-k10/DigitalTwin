@@ -30,13 +30,48 @@ const activeSignals = [
   },
 ];
 
-const trustMetrics = [
-  { label: 'Signals live', value: '24/7' },
-  { label: 'Focus mode', value: 'On' },
-  { label: 'Glow score', value: 'A+' },
+const loginPulseBadges = ['Health', 'Finance', 'Career'];
+
+const signalRanges = [
+  { label: 'Health', min: 75, max: 95 },
+  { label: 'Finance', min: 65, max: 90 },
+  { label: 'Career', min: 70, max: 95 },
 ];
 
-const loginPulseBadges = ['Health', 'Finance', 'Career'];
+function createDemoSignalStats() {
+  return signalRanges.map((signal) => ({
+    ...signal,
+    value: randomBetween(signal.min, signal.max),
+  }));
+}
+
+function randomBetween(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function useAnimatedSignalStats() {
+  const [stats] = useState(createDemoSignalStats);
+  const [animatedStats, setAnimatedStats] = useState(signalRanges.map(() => 0));
+
+  useEffect(() => {
+    let animationFrame;
+    let startTime;
+    const duration = 1800;
+
+    const animateCounters = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setAnimatedStats(stats.map((stat) => Math.round(stat.value * eased)));
+      if (progress < 1) animationFrame = requestAnimationFrame(animateCounters);
+    };
+
+    animationFrame = requestAnimationFrame(animateCounters);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [stats]);
+
+  return { stats, animatedStats };
+}
 
 function RotatingSignal({ signal }) {
   return (
@@ -78,6 +113,7 @@ function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [activeSignalIndex, setActiveSignalIndex] = useState(0);
+  const { stats: signalStats, animatedStats } = useAnimatedSignalStats();
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -131,10 +167,10 @@ function Login() {
                   <span className="h-2 w-2 rounded-full bg-[#10c7a1] shadow-[0_0_18px_rgba(16,199,161,0.85)]" /> Health · Finance · Career
                 </div>
                 <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl xl:text-6xl">
-                  Welcome back to your
-                  <span className="mt-2 block bg-gradient-to-r from-[#ffffff] via-[#9db7ff] to-[#7df3cc] bg-clip-text text-transparent">living digital twin.</span>
+                  Welcome
+                  <span className="mt-2 block bg-gradient-to-r from-[#ffffff] via-[#9db7ff] to-[#7df3cc] bg-clip-text text-transparent">back.</span>
                 </h1>
-                <p className="text-base leading-7 text-white/68 sm:text-lg">Sign in to a cinematic dashboard that keeps your health, money, and career signals in one moving view.</p>
+                <p className="text-base leading-7 text-white/68 sm:text-lg">Continue your journey with personalized insights, goal tracking, and progress across health, finance, and career.</p>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -143,14 +179,7 @@ function Login() {
                 ))}
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-3">
-                {trustMetrics.map((metric) => (
-                  <div key={metric.label} className="rounded-[1.4rem] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/45">{metric.label}</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{metric.value}</p>
-                  </div>
-                ))}
-              </div>
+              <SignalStatCards stats={signalStats} animatedStats={animatedStats} />
             </div>
           </div>
 
@@ -204,6 +233,36 @@ function Login() {
         </div>
       </section>
     </main>
+  );
+}
+
+function SignalStatCards({ stats, animatedStats }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {stats.map((item, index) => (
+        <motion.div
+          key={item.label}
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: [0, -4, 0] }}
+          transition={{
+            opacity: { duration: 0.55, delay: index * 0.1 },
+            y: { duration: 4 + index * 0.3, repeat: Infinity, ease: 'easeInOut' },
+          }}
+          className="rounded-[1.4rem] border border-white/10 bg-white/[0.03] p-4 shadow-[0_16px_50px_-35px_rgba(16,199,161,0.7)] backdrop-blur-md"
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/45">{item.label}</p>
+          <p className="mt-2 text-2xl font-semibold text-white">{animatedStats[index]}%</p>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <motion.div
+              className="h-full rounded-full bg-gradient-to-r from-[#7b61ff] via-[#10c7a1] to-[#7df3cc] shadow-[0_0_18px_rgba(16,199,161,0.65)]"
+              style={{ width: `${animatedStats[index]}%` }}
+              animate={{ boxShadow: ['0 0 6px rgba(16,199,161,0.35)', '0 0 18px rgba(16,199,161,0.75)', '0 0 10px rgba(16,199,161,0.45)'] }}
+              transition={{ duration: 1.8, ease: 'easeInOut' }}
+            />
+          </div>
+        </motion.div>
+      ))}
+    </div>
   );
 }
 

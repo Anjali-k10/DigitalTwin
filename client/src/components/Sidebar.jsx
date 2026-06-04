@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import DigitalTwinLogo from './DigitalTwinLogo';
+import { fetchTodayDailyUpdate } from '../features/dailyUpdate/dailyUpdateThunks';
+import useNotificationCount from '../hooks/useNotificationCount';
 
 // ✅ MODIFIED: Grouped Health, Finance, and Career under Dashboard's subItems
 const navItems = [
@@ -18,6 +21,7 @@ const navItems = [
   { label: 'Intelligence', href: '/intelligence', icon: SparkIcon },
   { label: 'Simulation', href: '/simulation', icon: BranchIcon },
   { label: 'Twin Copilot', href: '/copilot', icon: ChatIcon },
+  { label: 'Daily Update', href: '/daily-update', icon: CalendarIcon, dailyUpdate: true },
   { label: 'Notifications', href: '/notifications', icon: BellIcon },
 ];
 
@@ -25,6 +29,15 @@ const settingsItem = { label: 'Settings', href: '/settings', icon: SettingsIcon 
 
 function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const dispatch = useDispatch();
+  const unreadNotificationCount = useNotificationCount();
+
+  useEffect(() => {
+    dispatch(fetchTodayDailyUpdate());
+    const refresh = () => dispatch(fetchTodayDailyUpdate());
+    window.addEventListener('daily-update-completed', refresh);
+    return () => window.removeEventListener('daily-update-completed', refresh);
+  }, [dispatch]);
 
   return (
     <aside
@@ -46,7 +59,7 @@ function Sidebar() {
           {!isCollapsed && (
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold tracking-[0.18em] text-white/90">DigitalTwin</p>
-              <p className="truncate text-[11px] uppercase tracking-[0.28em] text-white/45">Warm control deck</p>
+              {/* <p className="truncate text-[11px] uppercase tracking-[0.28em] text-white/45">Warm control deck</p> */}
             </div>
           )}
         </NavLink>
@@ -80,13 +93,14 @@ function Sidebar() {
             key={item.label} 
             item={item} 
             isCollapsed={isCollapsed} 
-            setIsCollapsed={setIsCollapsed} 
+            setIsCollapsed={setIsCollapsed}
+            unreadNotificationCount={unreadNotificationCount}
           />
         ))}
       </nav>
 
       <nav className="relative mt-auto border-t border-white/10 pt-4">
-        <SidebarNavItem item={settingsItem} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+        <SidebarNavItem item={settingsItem} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} unreadNotificationCount={unreadNotificationCount} />
       </nav>
       </div>
     </aside>
@@ -94,13 +108,16 @@ function Sidebar() {
 }
 
 // ✅ MODIFIED: Added Dropdown / Accordion Logic
-function SidebarNavItem({ item, isCollapsed, setIsCollapsed }) {
+function SidebarNavItem({ item, isCollapsed, setIsCollapsed, unreadNotificationCount = 0 }) {
   const location = useLocation();
   const Icon = item.icon;
   const hasSubItems = !!item.subItems;
+  const dailyUpdateCompleted = useSelector((state) => state.dailyUpdate.completed);
   
   // Check if any sub-item is the current active route
   const isSubItemActive = hasSubItems && item.subItems.some((sub) => location.pathname === sub.href);
+  const pendingDailyUpdate = item.dailyUpdate && !dailyUpdateCompleted;
+  const hasUnreadNotifications = item.href === '/notifications' && unreadNotificationCount > 0;
   
   // State to manage dropdown visibility
   const [isOpen, setIsOpen] = useState(isSubItemActive);
@@ -108,11 +125,11 @@ function SidebarNavItem({ item, isCollapsed, setIsCollapsed }) {
   // Auto-expand if a sub-item becomes active
   useEffect(() => {
     if (isSubItemActive) {
-      setIsOpen(true);
+      window.setTimeout(() => setIsOpen(true), 0);
     }
   }, [isSubItemActive, location.pathname]);
 
-  const handleParentClick = (e) => {
+  const handleParentClick = () => {
     if (hasSubItems) {
       setIsOpen(!isOpen);
       // If user clicks the parent while collapsed, auto-expand the sidebar
@@ -133,7 +150,7 @@ function SidebarNavItem({ item, isCollapsed, setIsCollapsed }) {
           `group flex items-center justify-between rounded-2xl py-2.5 text-sm font-semibold transition-all duration-200 ${
             isCollapsed ? 'px-0 justify-center' : 'px-3'
           } ${
-            isActive || isSubItemActive
+            isActive || isSubItemActive || pendingDailyUpdate
               ? 'border border-white/10 bg-gradient-to-r from-[#ff7a00]/20 via-[#ff007f]/18 to-[#7b61ff]/18 text-white shadow-[0_14px_32px_-18px_rgba(255,122,0,0.8)]'
               : 'border border-transparent text-white/62 hover:border-white/10 hover:bg-white/5 hover:text-white'
           }`
@@ -142,6 +159,19 @@ function SidebarNavItem({ item, isCollapsed, setIsCollapsed }) {
         <div className="flex items-center gap-3">
           <Icon className="h-4 w-4 shrink-0 text-inherit transition-transform duration-200 group-hover:scale-105" />
           {!isCollapsed && <span>{item.label}</span>}
+          {pendingDailyUpdate && !isCollapsed && (
+            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-[#ffb020]/25 bg-[#ffb020]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#ffd089]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#ffb020]" />
+              Pending
+            </span>
+          )}
+          {hasUnreadNotifications && !isCollapsed && (
+            <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1.5 text-[10px] font-black leading-none text-white shadow-[0_0_14px_rgba(239,68,68,0.75)]">
+              {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+            </span>
+          )}
+          {pendingDailyUpdate && isCollapsed && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#ffb020] shadow-[0_0_10px_rgba(255,176,32,0.8)]" />}
+          {hasUnreadNotifications && isCollapsed && <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border border-[#130b1c] bg-[#ef4444] shadow-[0_0_12px_rgba(239,68,68,0.9)]" />}
         </div>
         
         {hasSubItems && !isCollapsed && (
@@ -218,6 +248,10 @@ function ChatIcon({ className }) {
 
 function BellIcon({ className }) {
   return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M18 9a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
+function CalendarIcon({ className }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none"><path d="M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v15H4V6a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="m8 15 2 2 4-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
 function SettingsIcon({ className }) {

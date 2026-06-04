@@ -6,6 +6,7 @@ import MainLayout from './layouts/MainLayout';
 import Career from './pages/Career';
 import Copilot from './pages/Copilot';
 import Dashboard from './pages/Dashboard';
+import DailyUpdate from './pages/DailyUpdate';
 import Finance from './pages/Finance';
 import Goals from './pages/Goals';
 import Health from './pages/Health';
@@ -19,7 +20,6 @@ import Simulation from './pages/Simulation';
 import Landing from './pages/Landing';
 import { GamificationProvider } from './context/GamificationContext';
 import ToastOverlay from './components/ToastOverlay';
-import DailySyncModal from './components/DailySyncModal';
 import { IntegrationProvider } from './context/IntegrationContext';
 
 function App() {
@@ -53,6 +53,7 @@ function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/copilot" element={<Copilot />} />
             <Route path="/simulation" element={<Simulation />} />
+            <Route path="/daily-update" element={<DailyUpdate />} />
 
           </Route>
         </Routes>

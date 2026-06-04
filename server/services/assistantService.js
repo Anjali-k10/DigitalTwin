@@ -38,6 +38,9 @@ export function parseAssistantCommand(rawCommand = '') {
   const navigationAction = parseNavigation(command);
   if (navigationAction) return navigationAction;
 
+  const deleteGoalAction = parseDeleteGoal(command);
+  if (deleteGoalAction) return deleteGoalAction;
+
   const goalAction = parseGoal(command);
   if (goalAction) return goalAction;
 
@@ -117,38 +120,56 @@ function parseFinanceQuestion(command) {
 }
 
 function parseNavigation(command) {
-  const match = navigationTargets.find((item) =>
-    item.patterns.some((pattern) => fuzzyIncludes(command, pattern)),
-  );
+  const match = findNavigationMatch(command);
 
   if (!match) return null;
 
   const hasNavigationVerb = /\b(open|go to|show|navigate to|take me to|launch|switch to|visit)\b/.test(command);
   const looksLikePageRequest = /\b(page|screen|section|tab)\b/.test(command);
-  const commandIsOnlyTarget = match.patterns.some((pattern) => command === pattern || command === `${pattern} page`);
+  const commandIsOnlyTarget = match.item.patterns.some((pattern) => command === pattern || command === `${pattern} page`);
 
   if (!hasNavigationVerb && !looksLikePageRequest && !commandIsOnlyTarget) return null;
 
-  console.log('[Twin Assistant] Detected intent:', match.intent);
+  console.log('[Twin Assistant] Detected intent:', match.item.intent);
   console.log('[Twin Assistant] Action: navigate');
-  console.log('[Twin Assistant] Target:', match.target);
+  console.log('[Twin Assistant] Target:', match.item.target);
 
   return withMessage({
     action: 'navigate',
-    intent: match.intent,
-    target: match.target,
-    response: `Opening ${match.label}...`,
+    intent: match.item.intent,
+    target: match.item.target,
+    response: `Opening ${match.item.label}...`,
   });
 }
 
+function findNavigationMatch(command) {
+  return navigationTargets
+    .flatMap((item) =>
+      item.patterns
+        .map((pattern) => ({ item, index: fuzzyIndexOf(command, pattern) }))
+        .filter((match) => match.index >= 0),
+    )
+    .sort((a, b) => b.index - a.index)[0] || null;
+}
+
 function fuzzyIncludes(command, pattern) {
-  if (command.includes(pattern)) return true;
+  return fuzzyIndexOf(command, pattern) >= 0;
+}
+
+function fuzzyIndexOf(command, pattern) {
+  const directIndex = command.lastIndexOf(pattern);
+  if (directIndex >= 0) return directIndex;
 
   const words = command.split(' ');
   const patternWords = pattern.split(' ');
-  return patternWords.every((patternWord) =>
+  const firstMatchIndex = words.findIndex((word) => isCloseWord(word, patternWords[0]));
+  if (firstMatchIndex < 0) return -1;
+
+  const allPatternWordsMatch = patternWords.every((patternWord) =>
     words.some((word) => isCloseWord(word, patternWord)),
   );
+
+  return allPatternWordsMatch ? firstMatchIndex : -1;
 }
 
 function isCloseWord(word, pattern) {
@@ -176,6 +197,18 @@ function levenshteinDistance(a, b) {
   return rows[a.length][b.length];
 }
 
+function parseDeleteGoal(command) {
+  const deleteMatch = command.match(/\b(?:delete|remove|clear)\s+(?:my\s+|the\s+|a\s+)?goal\s*(?:to|for|called|named)?\s*(.+)?$/);
+  if (!deleteMatch) return null;
+
+  const query = cleanTrailingWords(deleteMatch[1] || '');
+  return withMessage({
+    action: 'delete_goal',
+    query,
+    response: query ? `Deleting goal: ${toTitleCase(query)}...` : 'Tell me which goal to delete.',
+  });
+}
+
 function parseGoal(command) {
   const goalMatch = command.match(/\b(?:create|add|set|make)\s+(?:a\s+)?goal\s+(?:to|for|called|named)?\s*(.+)$/);
   if (!goalMatch?.[1]) return null;
@@ -199,7 +232,10 @@ function parseGoal(command) {
 }
 
 function parseSimulation(command) {
-  if (!command.startsWith('what if')) return null;
+  const isSimulationCommand = command.startsWith('what if')
+    || /\b(run|start|create|simulate|show)\b.*\b(simulation|what if)\b/.test(command)
+    || /\b(simulate|simulation)\b/.test(command);
+  if (!isSimulationCommand) return null;
 
   const payload = {
     command,
@@ -209,11 +245,20 @@ function parseSimulation(command) {
   const number = parseNumber(command);
 
   if (command.includes('study')) payload.simulated.study = number || 4;
+  if (command.includes('project')) payload.simulated.projects = number || 3;
+  if (command.includes('network')) payload.simulated.networking = number || 5;
   if (command.includes('save') || command.includes('savings')) {
     payload.simulated.savings = number ? Math.max(1, Math.round(number / 1000)) : 5;
   }
+  if (command.includes('invest') || command.includes('investment')) {
+    payload.simulated.investment = number ? Math.max(1, Math.round(number / 1000)) : 5;
+  }
+  if (command.includes('spend') || command.includes('expense')) {
+    payload.simulated.expenses = number ? Math.max(1, Math.round(number / 1000)) : 10;
+  }
   if (command.includes('exercise') || command.includes('workout')) payload.simulated.exercise = number || 4;
   if (command.includes('sleep')) payload.simulated.sleep = number || 8;
+  if (command.includes('water')) payload.simulated.water = number || 3;
 
   return withMessage({
     action: 'run_simulation',

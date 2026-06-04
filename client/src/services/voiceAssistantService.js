@@ -47,6 +47,20 @@ export async function createGoalFromAssistant(action) {
   return response.data;
 }
 
+export async function getGoalsForAssistant() {
+  const response = await axios.get(`${API_BASE_URL}/api/goals`, {
+    headers: authHeaders(),
+  });
+  return response.data;
+}
+
+export async function deleteGoalFromAssistant(goalId) {
+  const response = await axios.delete(`${API_BASE_URL}/api/goals/${goalId}`, {
+    headers: authHeaders(),
+  });
+  return response.data;
+}
+
 export async function getDashboardForAssistant() {
   const response = await axios.get(`${API_BASE_URL}/api/dashboard`, {
     headers: authHeaders(),

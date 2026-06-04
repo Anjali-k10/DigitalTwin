@@ -134,6 +134,21 @@ const userSchema = new mongoose.Schema(
       theme: { type: String, default: 'dark' },
       notifications: { type: Boolean, default: true },
       twinAssistantEnabled: { type: Boolean, default: false },
+      twinAssistantPreferences: {
+        backgroundListening: { type: Boolean, default: true },
+        wakeWordDetection: { type: Boolean, default: false },
+        voiceResponses: { type: Boolean, default: false },
+      },
+      notificationPreferences: {
+        goalNotifications: { type: Boolean, default: true },
+        healthAlerts: { type: Boolean, default: true },
+        financeAlerts: { type: Boolean, default: true },
+        careerAlerts: { type: Boolean, default: true },
+        dailyUpdateReminders: { type: Boolean, default: true },
+        aiMotivationalMessages: { type: Boolean, default: true },
+        emailNotifications: { type: Boolean, default: true },
+        highPriorityOnly: { type: Boolean, default: false },
+      },
     },
   },
   {

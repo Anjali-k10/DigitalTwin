@@ -4,6 +4,7 @@ import SmartGoal from '../models/SmartGoal.js';
 import DailyTracking from '../models/DailyTracking.js';
 import GamificationEngine from '../services/GamificationEngine.js';
 import CopilotOracleService from '../services/CopilotOracleService.js';
+import { createNotification } from '../services/notificationService.js';
 
 const router = express.Router();
 
@@ -22,6 +23,17 @@ router.post('/', authenticateToken, async (req, res) => {
     });
 
     const gamification = await GamificationEngine.logEvent(userId, 'GOAL_SET', { goalId: newGoal._id });
+    await createNotification({
+      userId,
+      category: 'goal',
+      subType: 'goal-created',
+      title: 'Goal Created',
+      message: `${newGoal.title} created successfully.`,
+      priority: 'medium',
+      motivation: 'Every expert was once a beginner.',
+      actionLink: '/goals',
+      sendEmail: true,
+    });
 
     res.status(201).json({ success: true, data: newGoal, gamification });
   } catch (error) {
@@ -217,6 +229,30 @@ router.patch('/:id/progress', authenticateToken, async (req, res) => {
     const eventName    = goal.status === 'completed' ? 'GOAL_COMPLETED' : 'GOAL_PROGRESS_LOGGED';
     const streakBonus  = goal.streak >= 7 ? 15 : goal.streak >= 3 ? 5 : 0;
     const gamification = await GamificationEngine.logEvent(userId, eventName, { goalId: goal._id, streakBonus });
+    if (goal.status === 'completed') {
+      await createNotification({
+        userId,
+        category: 'goal',
+        subType: 'goal-completed',
+        title: 'Goal Completed',
+        message: `${goal.title} completed successfully.`,
+        priority: 'high',
+        motivation: 'You achieved what you planned. Time to aim higher.',
+        actionLink: '/goals',
+        sendEmail: true,
+      });
+    } else if (goal.targetMetric > 0 && (goal.currentMetric / goal.targetMetric) >= 0.75) {
+      await createNotification({
+        userId,
+        category: 'goal',
+        subType: 'goal-progress',
+        title: 'Goal Progress Above 75%',
+        message: `${goal.title} is more than 75% complete.`,
+        priority: 'medium',
+        motivation: 'Small daily wins become visible progress.',
+        actionLink: '/goals',
+      });
+    }
 
     res.status(200).json({ success: true, data: goal, gamification });
   } catch (error) {

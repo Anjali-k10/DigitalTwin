@@ -15,13 +15,48 @@ const activeSignals = [
   { emoji: '🎯', label: 'Career', title: 'Move with sharper intent', copy: 'Turn opportunity into a visible, animated next step with style.', accent: 'from-[#7b61ff] via-[#0fbf87] to-[#1e2d7a]' },
 ];
 
-const signalStats = [
-  { label: 'Health', value: 84, bar: 92 },
-  { label: 'Finance', value: 71, bar: 74 },
-  { label: 'Career', value: 78, bar: 82 },
+const signalRanges = [
+  { label: 'Health', min: 75, max: 95 },
+  { label: 'Finance', min: 65, max: 90 },
+  { label: 'Career', min: 70, max: 95 },
 ];
 
 const orbitEmojis = ['🧬', '💎', '🎯'];
+
+function createDemoSignalStats() {
+  return signalRanges.map((signal) => ({
+    ...signal,
+    value: randomBetween(signal.min, signal.max),
+  }));
+}
+
+function randomBetween(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function useAnimatedSignalStats() {
+  const [stats] = useState(createDemoSignalStats);
+  const [animatedStats, setAnimatedStats] = useState(signalRanges.map(() => 0));
+
+  useEffect(() => {
+    let animationFrame;
+    let startTime;
+    const duration = 1800;
+
+    const animateCounters = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setAnimatedStats(stats.map((stat) => Math.round(stat.value * eased)));
+      if (progress < 1) animationFrame = requestAnimationFrame(animateCounters);
+    };
+
+    animationFrame = requestAnimationFrame(animateCounters);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [stats]);
+
+  return { stats, animatedStats };
+}
 
 function RotatingSignal({ signal }) {
   return (
@@ -50,22 +85,13 @@ function Signup() {
   const dispatch = useDispatch();
   const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '' });
   const [isLoading, setIsLoading] = useState(false);
-  const [animatedStats, setAnimatedStats] = useState(signalStats.map(() => 0));
-  const [barsReady, setBarsReady] = useState(false);
   const [activeSignalIndex, setActiveSignalIndex] = useState(0);
+  const { stats: signalStats, animatedStats } = useAnimatedSignalStats();
 
   useEffect(() => {
-    let animationFrame;
-    const animateCounters = (timestamp) => {
-      const progress = Math.min((timestamp - performance.now()) / 2200, 1);
-      setAnimatedStats(signalStats.map((stat) => Math.round(stat.value * (1 - Math.pow(1 - progress, 3)))));
-      if (progress < 1) animationFrame = requestAnimationFrame(animateCounters);
-    };
-    animationFrame = requestAnimationFrame(animateCounters);
-    const barTimer = setTimeout(() => setBarsReady(true), 420);
     const signalTimer = setInterval(() => setActiveSignalIndex((c) => (c + 1) % activeSignals.length), 3500);
 
-    return () => { cancelAnimationFrame(animationFrame); clearTimeout(barTimer); clearInterval(signalTimer); };
+    return () => { clearInterval(signalTimer); };
   }, []);
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -130,22 +156,12 @@ function Signup() {
                   <span className="h-2 w-2 rounded-full bg-[#10c7a1] shadow-[0_0_18px_rgba(16,199,161,0.85)]" /> New account flow
                 </div>
                 <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl xl:text-6xl">
-                  Start with a <span className="mt-2 block bg-gradient-to-r from-[#ffffff] via-[#9db7ff] to-[#7df3cc] bg-clip-text text-transparent">cinematic digital twin.</span>
+                  Build a smarter <span className="mt-2 block bg-gradient-to-r from-[#ffffff] via-[#9db7ff] to-[#7df3cc] bg-clip-text text-transparent">view of your life.</span>
                 </h1>
-                <p className="text-base leading-7 text-white/68 sm:text-lg">Create your profile and unlock a dark premium interface where health, finance, and career signals move in sync.</p>
+                <p className="text-base leading-7 text-white/68 sm:text-lg">Monitor health, finance, and career progress while receiving personalized guidance and actionable insights.</p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-3">
-                {signalStats.map((item, index) => (
-                  <div key={item.label} className="rounded-[1.4rem] border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/45">{item.label}</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{animatedStats[index]}%</p>
-                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-                      <div className="h-full rounded-full bg-gradient-to-r from-[#7b61ff] via-[#10c7a1] to-[#7df3cc] transition-all duration-[2200ms]" style={{ width: barsReady ? `${item.bar}%` : '0%' }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <SignalStatCards stats={signalStats} animatedStats={animatedStats} />
             </div>
           </div>
 
@@ -210,6 +226,36 @@ function Signup() {
         </div>
       </section>
     </main>
+  );
+}
+
+function SignalStatCards({ stats, animatedStats }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {stats.map((item, index) => (
+        <motion.div
+          key={item.label}
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: [0, -4, 0] }}
+          transition={{
+            opacity: { duration: 0.55, delay: index * 0.1 },
+            y: { duration: 4 + index * 0.3, repeat: Infinity, ease: 'easeInOut' },
+          }}
+          className="rounded-[1.4rem] border border-white/10 bg-white/[0.03] p-4 shadow-[0_16px_50px_-35px_rgba(16,199,161,0.7)] backdrop-blur-md"
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-white/45">{item.label}</p>
+          <p className="mt-2 text-2xl font-semibold text-white">{animatedStats[index]}%</p>
+          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+            <motion.div
+              className="h-full rounded-full bg-gradient-to-r from-[#7b61ff] via-[#10c7a1] to-[#7df3cc] shadow-[0_0_18px_rgba(16,199,161,0.65)]"
+              style={{ width: `${animatedStats[index]}%` }}
+              animate={{ boxShadow: ['0 0 6px rgba(16,199,161,0.35)', '0 0 18px rgba(16,199,161,0.75)', '0 0 10px rgba(16,199,161,0.45)'] }}
+              transition={{ duration: 1.8, ease: 'easeInOut' }}
+            />
+          </div>
+        </motion.div>
+      ))}
+    </div>
   );
 }
 

@@ -4,7 +4,7 @@ import { useDispatch } from 'react-redux';
 import axios from 'axios';
 import {
   Activity, Bot, CalendarDays, Check, CircleHelp, Code2, CreditCard,
-  ExternalLink, Globe, LockKeyhole, LogOut, Mail, Network, Pencil,
+  Globe, LockKeyhole, LogOut, Mail, Network, Pencil,
   Phone, Save, ShieldCheck, UserRound, X, Wifi, WifiOff, RefreshCw,
   AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronUp,
   Zap,
@@ -160,7 +160,16 @@ function Settings() {
   const [draft,   setDraft]   = useState(profile);
   const [editing, setEditing] = useState('');
   const [savedMessage, setSavedMessage] = useState('');
-  const [settings, setSettings] = useState({ theme: 'dark', notifications: true, twinAssistantEnabled: false });
+  const [settings, setSettings] = useState({
+    theme: 'dark',
+    notifications: true,
+    twinAssistantEnabled: false,
+    twinAssistantPreferences: {
+      backgroundListening: true,
+      voiceResponses: false,
+    },
+    notificationPreferences: { emailNotifications: true },
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -177,7 +186,16 @@ function Settings() {
         if (!isMounted) return;
         const authUser       = authR.status === 'fulfilled' ? authR.value.data?.data || {} : {};
         const onboardingProf = dashR.status === 'fulfilled' ? dashR.value.data?.data?.profile || {} : {};
-        const backendSettings = settR.status === 'fulfilled' ? settR.value : { theme: 'dark', notifications: true, twinAssistantEnabled: false };
+        const backendSettings = settR.status === 'fulfilled' ? settR.value : {
+          theme: 'dark',
+          notifications: true,
+          twinAssistantEnabled: false,
+          twinAssistantPreferences: {
+            backgroundListening: true,
+            voiceResponses: false,
+          },
+          notificationPreferences: { emailNotifications: true },
+        };
         const next = normalizeBackendProfile(authUser, onboardingProf);
         localStorage.setItem('user', JSON.stringify(next));
         setProfile(next); setDraft(next); setSettings(backendSettings);
@@ -226,6 +244,41 @@ function Settings() {
     } catch { setSettings(settings); showToast('Could not save assistant setting'); }
   };
 
+  const handleTwinAssistantPreferenceToggle = async (key) => {
+    const twinAssistantPreferences = {
+      ...(settings.twinAssistantPreferences || {}),
+      [key]: !(settings.twinAssistantPreferences?.[key] ?? true),
+    };
+    const next = { ...settings, twinAssistantPreferences };
+    setSettings(next);
+    try {
+      const saved = await updateSettings({ twinAssistantPreferences });
+      setSettings(saved);
+      window.dispatchEvent(new Event('twin-assistant-settings-updated'));
+      showToast('Twin Assistant setting saved');
+    } catch {
+      setSettings(settings);
+      showToast('Could not save assistant setting');
+    }
+  };
+
+  const handleEmailNotificationsToggle = async () => {
+    const notificationPreferences = {
+      ...(settings.notificationPreferences || {}),
+      emailNotifications: !(settings.notificationPreferences?.emailNotifications ?? true),
+    };
+    const next = { ...settings, notificationPreferences };
+    setSettings(next);
+    try {
+      const saved = await updateSettings({ notificationPreferences });
+      setSettings(saved);
+      showToast(notificationPreferences.emailNotifications ? 'Email notifications enabled' : 'Email notifications disabled');
+    } catch {
+      setSettings(settings);
+      showToast('Could not save email notification setting');
+    }
+  };
+
   const handleLogout = async () => { await dispatch(logoutUser()); navigate('/', { replace: true }); };
 
   return (
@@ -243,7 +296,7 @@ function Settings() {
                 <div className="grid h-full w-full place-items-center rounded-[calc(1.5rem-2px)] bg-[#080d15] text-3xl font-black">{initials || 'DT'}</div>
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#7df3cc]/70">Settings</p>
+                {/* <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#7df3cc]/70">Settings</p> */}
                 <h2 className="mt-2 text-3xl font-black tracking-tight sm:text-5xl">{profile.fullName}</h2>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-white/60">Profile, integrations, assistant, and session controls.</p>
               </div>
@@ -267,13 +320,8 @@ function Settings() {
                 <div className="mt-4 grid gap-4 lg:grid-cols-3">
                   {editableFields.map(field => (
                     <EditableCard key={field.key} field={field}
-                      value={draft[field.key]}
                       displayValue={field.key === 'password' ? maskPassword(profile.passwordSet || profile.password) : profile[field.key]}
-                      isEditing={editing === field.key}
                       onEdit={() => { setDraft(profile); setEditing(field.key); }}
-                      onCancel={() => { setDraft(profile); setEditing(''); }}
-                      onChange={handleChange}
-                      onSave={() => saveProfile([field.key])}
                     />
                   ))}
                 </div>
@@ -284,7 +332,7 @@ function Settings() {
                 <div className="space-y-3">
                   <SupportRow title="Contact support"  copy="Get help with your account, profile data, or connected links." />
                   <SupportRow title="Security help"    copy="Review sign-in and password guidance for your Digital Twin account." />
-                  <a href="mailto:support@digitaltwin.app"
+                  <a href="mailto:k.anjaliii.1011@gmail.com"
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#10c7a1]/25 bg-[#10c7a1]/10 px-4 py-3 text-sm font-black text-[#7df3cc] transition hover:bg-[#10c7a1]/15">
                     <Mail className="h-4 w-4" />Email Support
                   </a>
@@ -320,22 +368,53 @@ function Settings() {
 
           {/* ── Twin Assistant ── */}
           <SettingsSection icon={Bot} eyebrow="Voice Control" title="Twin Assistant">
-            <div className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.045] p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="max-w-3xl">
-                <h4 className="text-xl font-black text-white">Twin Assistant</h4>
-                <p className="mt-2 text-sm leading-6 text-white/56">
-                  Enable voice commands to control the app. When disabled, all actions must be performed manually.
-                </p>
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.045] p-5">
+              <AssistantToggle
+                title="Enable Twin Assistant"
+                copy="Start the Deepgram-powered assistant and allow hands-free voice control."
+                checked={settings.twinAssistantEnabled}
+                onChange={handleTwinAssistantToggle}
+              />
+              <div className="grid gap-3 md:grid-cols-2">
+                <AssistantToggle
+                  title="Background Listening"
+                  copy="Keep listening while you use the app."
+                  checked={settings.twinAssistantPreferences?.backgroundListening ?? true}
+                  onChange={() => handleTwinAssistantPreferenceToggle('backgroundListening')}
+                  compact
+                />
+                <AssistantToggle
+                  title="Voice Responses"
+                  copy="Allow spoken responses when supported."
+                  checked={settings.twinAssistantPreferences?.voiceResponses ?? false}
+                  onChange={() => handleTwinAssistantPreferenceToggle('voiceResponses')}
+                  compact
+                />
               </div>
-              <button type="button" role="switch" aria-checked={settings.twinAssistantEnabled}
-                onClick={handleTwinAssistantToggle}
-                className={`relative h-9 w-16 shrink-0 rounded-full border p-1 transition ${settings.twinAssistantEnabled ? 'border-[#10c7a1]/45 bg-[#10c7a1]' : 'border-white/12 bg-white/10'}`}>
-                <span className={`block h-7 w-7 rounded-full bg-white shadow-lg transition ${settings.twinAssistantEnabled ? 'translate-x-7' : 'translate-x-0'}`} />
-              </button>
+              <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4">
+                <StatusPill active={settings.twinAssistantEnabled} label={settings.twinAssistantEnabled ? 'Active' : 'Inactive'} />
+                <StatusPill active={settings.twinAssistantEnabled && (settings.twinAssistantPreferences?.backgroundListening ?? true)} label={settings.twinAssistantEnabled ? 'Listening' : 'Not Listening'} />
+              </div>
             </div>
           </SettingsSection>
 
           {/* ── Logout ── */}
+          <SettingsSection icon={Mail} eyebrow="Notifications" title="Website And Email Alerts">
+            <div className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.045] p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="max-w-3xl">
+                <h4 className="text-xl font-black text-white">Email Notifications</h4>
+                <p className="mt-2 text-sm leading-6 text-white/56">
+                  Send the same Digital Twin alerts to your registered email address while keeping them visible inside the app.
+                </p>
+              </div>
+              <button type="button" role="switch" aria-checked={settings.notificationPreferences?.emailNotifications ?? true}
+                onClick={handleEmailNotificationsToggle}
+                className={`relative h-9 w-16 shrink-0 rounded-full border p-1 transition ${(settings.notificationPreferences?.emailNotifications ?? true) ? 'border-[#10c7a1]/45 bg-[#10c7a1]' : 'border-white/12 bg-white/10'}`}>
+                <span className={`block h-7 w-7 rounded-full bg-white shadow-lg transition ${(settings.notificationPreferences?.emailNotifications ?? true) ? 'translate-x-7' : 'translate-x-0'}`} />
+              </button>
+            </div>
+          </SettingsSection>
+
           <section className="mx-auto max-w-2xl rounded-[1.5rem] border border-[#ff007f]/25 bg-[#0b111a]/92 p-5 text-center shadow-[0_20px_60px_-36px_rgba(0,0,0,0.9)] backdrop-blur-xl sm:p-6">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-[#ff007f]/25 bg-[#ff007f]/10 text-[#ff8fbd]">
               <ShieldCheck className="h-6 w-6" />
@@ -350,6 +429,17 @@ function Settings() {
           </section>
         </div>
       </div>
+
+      {editing && (
+        <EditProfileModal
+          field={editableFields.find((field) => field.key === editing)}
+          currentValue={editing === 'password' ? maskPassword(profile.passwordSet || profile.password) : profile[editing]}
+          value={draft[editing]}
+          onChange={handleChange}
+          onCancel={() => { setDraft(profile); setEditing(''); }}
+          onSave={() => saveProfile([editing])}
+        />
+      )}
     </div>
   );
 }
@@ -541,42 +631,90 @@ function ReadOnlyCard({ icon: Icon, label, value }) {
   );
 }
 
-function EditableCard({ field, value, displayValue, isEditing, onEdit, onCancel, onChange, onSave }) {
+function EditableCard({ field, displayValue, onEdit }) {
   const Icon = field.icon;
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4 transition focus-within:border-[#10c7a1]/45 focus-within:bg-white/[0.07]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <label className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1">
           <span className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-white/40">
             <Icon className="h-4 w-4 text-[#7df3cc]" />{field.label}
           </span>
-          {isEditing ? (
-            <input name={field.key} type={field.type} value={value} onChange={onChange}
-              placeholder={field.placeholder} autoComplete={field.key === 'password' ? 'new-password' : 'off'}
-              className="h-12 w-full rounded-xl border border-white/10 bg-[#080d15] px-4 text-sm font-semibold text-white outline-none placeholder:text-white/25 focus:border-[#10c7a1]/55" />
-          ) : (
-            <p className="min-h-12 break-words rounded-xl border border-transparent py-3 text-base font-black text-white/88">
-              {displayValue || 'Not set'}
-            </p>
-          )}
-        </label>
-        {isEditing ? (
-          <div className="flex shrink-0 gap-2">
-            <button type="button" onClick={onCancel} aria-label={`Cancel ${field.label} edit`}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.055] text-white/62 transition hover:bg-white/10 hover:text-white">
-              <X className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={onSave} aria-label={`Save ${field.label}`}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#10c7a1] text-[#06110f] transition hover:bg-[#7df3cc]">
-              <Save className="h-4 w-4" />
-            </button>
+          <p className="min-h-12 break-words rounded-xl border border-transparent py-3 text-base font-black text-white/88">
+            {displayValue || 'Not set'}
+          </p>
+        </div>
+        <button type="button" onClick={onEdit} aria-label={`Edit ${field.label}`}
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.055] text-white/62 transition hover:bg-white/10 hover:text-white">
+          <Pencil className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EditProfileModal({ field, currentValue, value, onChange, onCancel, onSave }) {
+  if (!field) return null;
+  const Icon = field.icon;
+  const canSave = String(value || '').trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#02040a]/72 px-4 backdrop-blur-xl">
+      <div className="w-full max-w-lg rounded-[1.5rem] border border-white/12 bg-[#0b111a] p-5 text-white shadow-[0_30px_100px_-35px_rgba(0,0,0,0.95)] sm:p-6">
+        <div className="mb-5 flex items-start justify-between gap-4 border-b border-white/10 pb-5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#10c7a1]/25 bg-[#10c7a1]/10 text-[#7df3cc]">
+              <Icon className="h-5 w-5" />
+            </span>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-white/38">Edit Profile</p>
+              <h3 className="mt-1 text-2xl font-black">{field.label}</h3>
+            </div>
           </div>
-        ) : (
-          <button type="button" onClick={onEdit} aria-label={`Edit ${field.label}`}
+          <button type="button" onClick={onCancel} aria-label="Close edit dialog"
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.055] text-white/62 transition hover:bg-white/10 hover:text-white">
-            <Pencil className="h-4 w-4" />
+            <X className="h-4 w-4" />
           </button>
-        )}
+        </div>
+
+        <div className="space-y-4">
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-white/38">Current value</span>
+            <input
+              type="text"
+              value={currentValue || 'Not set'}
+              readOnly
+              className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.045] px-4 text-sm font-bold text-white/62 outline-none"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-xs font-bold uppercase tracking-[0.18em] text-[#7df3cc]/70">New value</span>
+            <input
+              name={field.key}
+              type={field.type}
+              value={value || ''}
+              onChange={onChange}
+              placeholder={field.placeholder}
+              autoComplete={field.key === 'password' ? 'new-password' : 'off'}
+              className="h-12 w-full rounded-xl border border-white/10 bg-[#080d15] px-4 text-sm font-semibold text-white outline-none placeholder:text-white/25 focus:border-[#10c7a1]/55"
+              autoFocus
+            />
+          </label>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onCancel}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.055] px-4 py-3 text-sm font-bold text-white/62 transition hover:bg-white/10 hover:text-white">
+            <X className="h-4 w-4" />
+            Cancel
+          </button>
+          <button type="button" onClick={onSave} disabled={!canSave}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#10c7a1] px-4 py-3 text-sm font-black text-[#06110f] transition hover:bg-[#7df3cc] disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30">
+            <Save className="h-4 w-4" />
+            Save Changes
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -588,6 +726,31 @@ function SupportRow({ title, copy }) {
       <p className="text-sm font-black text-white">{title}</p>
       <p className="mt-2 text-sm leading-6 text-white/52">{copy}</p>
     </div>
+  );
+}
+
+function AssistantToggle({ title, copy, checked, onChange, compact = false }) {
+  return (
+    <div className={`flex gap-4 rounded-2xl border border-white/10 bg-white/[0.035] ${compact ? 'flex-col p-4' : 'flex-col p-5 sm:flex-row sm:items-center sm:justify-between'}`}>
+      <div className="min-w-0">
+        <h4 className={`${compact ? 'text-sm' : 'text-xl'} font-black text-white`}>{title}</h4>
+        <p className="mt-2 text-sm leading-6 text-white/56">{copy}</p>
+      </div>
+      <button type="button" role="switch" aria-checked={checked}
+        onClick={onChange}
+        className={`relative h-9 w-16 shrink-0 rounded-full border p-1 transition ${checked ? 'border-[#10c7a1]/45 bg-[#10c7a1]' : 'border-white/12 bg-white/10'}`}>
+        <span className={`block h-7 w-7 rounded-full bg-white shadow-lg transition ${checked ? 'translate-x-7' : 'translate-x-0'}`} />
+      </button>
+    </div>
+  );
+}
+
+function StatusPill({ active, label }) {
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] ${active ? 'border-[#10c7a1]/25 bg-[#10c7a1]/10 text-[#7df3cc]' : 'border-white/10 bg-white/[0.045] text-white/38'}`}>
+      <span className={`h-2 w-2 rounded-full ${active ? 'bg-[#10c7a1] shadow-[0_0_10px_rgba(16,199,161,0.8)]' : 'bg-white/30'}`} />
+      {label}
+    </span>
   );
 }
 

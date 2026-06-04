@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Sparkles, ArrowRight, Activity, Wallet, Target, BarChart3, PieChart } from 'lucide-react';
+import { Sparkles, ArrowRight, Activity, Wallet, Target } from 'lucide-react';
 import DigitalTwinLogo from '../components/DigitalTwinLogo';
 
 
@@ -140,13 +140,6 @@ export default function Landing() {
         <div className="flex items-center gap-3 text-xl font-bold tracking-tighter">
           <DigitalTwinLogo className="h-8 w-8 rounded-full" />
           <span className="bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">DigitalTwin</span>
-        </div>
-        <div className="hidden gap-8 text-sm font-medium text-white/70 md:flex">
-          {['Home', 'Features', 'Intelligence', 'Contact'].map((item) => (
-            <a key={item} href={`#${item.toLowerCase()}`} className="transition hover:text-white">
-              {item}
-            </a>
-          ))}
         </div>
         <div className="flex items-center gap-4">
           <Link to="/login" className="hidden text-sm font-semibold text-white/80 transition hover:text-white sm:block">

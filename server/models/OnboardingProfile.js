@@ -191,6 +191,8 @@ const onboardingProfileSchema = new mongoose.Schema(
         {
           date: { type: String, trim: true, required: true },
           goals: { type: [String], default: [] },
+          goalCompleted: { type: Boolean, default: true },
+          completed: { type: Boolean, default: true },
           completedAt: { type: Date, default: Date.now },
         },
       ],

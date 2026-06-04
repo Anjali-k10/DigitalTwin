@@ -106,17 +106,64 @@ const impactChains = [
   {
     title: 'Recovery Loop',
     copy: 'More sleep raises recovery first, then pushes work stamina higher.',
-    steps: ['Sleep +2h', 'Health +12', 'Career +5'],
+    steps: [
+      {
+        label: 'Sleep +2h',
+        explanation: 'Adding 2 extra hours of sleep improves recovery, energy levels, and mental focus.',
+      },
+      {
+        label: 'Health +14',
+        explanation: 'Better sleep increases overall health score through improved physical and mental well-being.',
+      },
+      {
+        label: 'Career +4',
+        explanation: 'Higher energy and concentration improve productivity and work performance.',
+      },
+    ],
   },
   {
     title: 'Money Calm',
     copy: 'Extra savings lowers background stress and frees up focus.',
-    steps: ['Savings +Rs 10k', 'Stress -8', 'Focus +4', 'Career +2'],
+    steps: [
+      {
+        label: 'Savings +Rs 447k',
+        explanation: 'Building stronger savings creates a larger financial safety net.',
+      },
+      {
+        label: 'Stress -8',
+        explanation: 'Reduced financial pressure lowers stress levels.',
+      },
+      {
+        label: 'Focus +4',
+        explanation: 'Lower stress improves concentration and decision making.',
+      },
+      {
+        label: 'Career +3',
+        explanation: 'Better focus supports learning, productivity, and career growth.',
+      },
+    ],
   },
   {
     title: 'Skill Flywheel',
     copy: 'Study time compounds into career readiness and future income upside.',
-    steps: ['Study +2h', 'Career +10', 'Income Potential +6', 'Finance +4'],
+    steps: [
+      {
+        label: 'Study +2h',
+        explanation: 'Spending additional time learning builds skills and domain knowledge.',
+      },
+      {
+        label: 'Career +10',
+        explanation: 'Stronger skills increase career readiness and professional growth.',
+      },
+      {
+        label: 'Income Potential +6',
+        explanation: 'Improved qualifications create opportunities for better roles and higher salaries.',
+      },
+      {
+        label: 'Finance +1',
+        explanation: 'Higher earning potential contributes to long-term financial improvement.',
+      },
+    ],
   },
 ];
 
@@ -163,10 +210,33 @@ function normalizeAnalysis(data) {
 
   return {
     resultCards: resultCardsWithChrome,
-    impactChains: data?.impactChains?.length ? data.impactChains : impactChains,
+    impactChains: normalizeImpactChains(data?.impactChains?.length ? data.impactChains : impactChains),
     twinScore: data?.twinScore || defaultAnalysis.twinScore,
     source: data?.source || 'fallback',
   };
+}
+
+function normalizeImpactChains(chains = []) {
+  return chains.map((chain) => {
+    const fallback = impactChains.find((item) => item.title === chain.title);
+    return {
+      ...chain,
+      copy: chain.copy || fallback?.copy || '',
+      steps: (chain.steps || fallback?.steps || []).map((step, index) => {
+        if (typeof step === 'object' && step.label) {
+          return { ...step, label: normalizeImpactLabel(step.label) };
+        }
+        return {
+          label: normalizeImpactLabel(String(step)),
+          explanation: fallback?.steps?.[index]?.explanation || '',
+        };
+      }),
+    };
+  });
+}
+
+function normalizeImpactLabel(label) {
+  return String(label).replace(/Savings \+Rs\s*-/i, 'Savings +Rs ');
 }
 
 function Simulation() {
@@ -604,8 +674,9 @@ function ResultScreen({ analysis, analysisError, onReset }) {
           <p className="mt-3 max-w-2xl text-sm leading-6 text-white/60">
             {analysis.source === 'ai' ? 'Generated from real-time AI analysis of your current and simulated values.' : analysisError || 'Generated from deterministic fallback analysis.'}
           </p>
-          <div className="mt-5">
-            <ScoreGauge current={twinScore.current} simulated={twinScore.simulated} />
+          <div className="mt-6 grid items-stretch gap-4 xl:grid-cols-2">
+            <OverallTwinScore current={twinScore.current} simulated={twinScore.simulated} />
+            <SimulationSummary current={twinScore.current} simulated={twinScore.simulated} />
           </div>
         </HeroPanel>
 
@@ -615,7 +686,7 @@ function ResultScreen({ analysis, analysisError, onReset }) {
           ))}
         </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1fr_360px]">
+        <section>
           <div className="rounded-[1.5rem] border border-white/10 bg-[#0b111a]/92 p-5 shadow-[0_20px_60px_-36px_rgba(0,0,0,0.9)] backdrop-blur-xl sm:p-6">
             <div className="mb-5 flex items-center justify-between border-b border-white/10 pb-4">
               <div>
@@ -632,24 +703,6 @@ function ResultScreen({ analysis, analysisError, onReset }) {
               {analysis.impactChains.map((chain) => (
                 <ImpactChain key={chain.title} chain={chain} />
               ))}
-            </div>
-          </div>
-
-          <div className="rounded-[1.5rem] border border-white/10 bg-gradient-to-br from-[#1a103d] via-[#231044] to-[#132b35] p-5 text-white shadow-[0_20px_60px_-35px_rgba(0,0,0,0.9)]">
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-white/48">Overall Twin Score</p>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <TwinScore label="Current Twin" value={twinScore.current} />
-              <TwinScore label="Simulated Twin" value={twinScore.simulated} active />
-            </div>
-            <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.055] p-4">
-              <div className="flex items-center justify-between text-sm font-bold text-white/70">
-                <span>Before</span>
-                <ArrowRight className="h-4 w-4" />
-                <span>After</span>
-              </div>
-              <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/10">
-                <div className="h-full w-[87%] rounded-full bg-gradient-to-r from-[#ff7a00] via-[#ff007f] to-[#10c7a1]" />
-              </div>
             </div>
           </div>
         </section>
@@ -673,6 +726,75 @@ function ResultScreen({ analysis, analysisError, onReset }) {
         </div>
       </div>
     </PageShell>
+  );
+}
+
+function SimulationSummary({ current, simulated }) {
+  const points = [
+    'Health score improves significantly due to better recovery and energy levels.',
+    'Career growth accelerates through increased productivity and learning.',
+    'Financial stability remains strong with reduced risk.',
+    `Overall Twin Score improves from ${current} to ${simulated}.`,
+  ];
+
+  return (
+    <div className="flex h-full min-h-[360px] flex-col rounded-[1.35rem] border border-white/10 bg-white/[0.055] p-6 backdrop-blur-xl">
+      <div className="flex items-center gap-3">
+        <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#10c7a1]/25 bg-[#10c7a1]/10 text-[#7df3cc]">
+          <Sparkles className="h-5 w-5" />
+        </span>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#7df3cc]/70">Simulation Summary</p>
+          <h3 className="mt-1 text-xl font-black text-white">Based on your selected improvements</h3>
+        </div>
+      </div>
+
+      <div className="mt-5 grid flex-1 gap-3 md:grid-cols-2">
+        {points.map((point) => (
+          <div key={point} className="flex gap-3 rounded-2xl border border-white/10 bg-[#080d15]/80 p-4">
+            <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#10c7a1] shadow-[0_0_10px_rgba(16,199,161,0.75)]" />
+            <p className="text-sm leading-6 text-white/66">{point}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OverallTwinScore({ current, simulated }) {
+  const progressWidth = `${Math.min(Math.max(Number(simulated || 0), 0), 100)}%`;
+
+  return (
+    <div className="flex h-full min-h-[360px] flex-col rounded-[1.35rem] border border-white/10 bg-gradient-to-br from-[#1a103d]/88 via-[#231044]/82 to-[#132b35]/88 p-6 text-white shadow-[0_20px_60px_-40px_rgba(0,0,0,0.9)]">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-white/48">Overall Twin Score</p>
+          <p className="mt-2 text-sm leading-6 text-white/56">
+            Your simulated choices improve the full Digital Twin across health, finance, and career signals.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+        <TwinScore label="Current Twin" value={current} />
+        <ArrowRight className="mx-auto hidden h-5 w-5 text-white/38 sm:block" />
+        <TwinScore label="Simulated Twin" value={simulated} active />
+      </div>
+
+      <div className="mt-auto rounded-2xl border border-white/10 bg-white/[0.055] p-4">
+        <div className="flex items-center justify-between text-sm font-bold text-white/70">
+          <span>Before</span>
+          <ArrowRight className="h-4 w-4" />
+          <span>After</span>
+        </div>
+        <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-[#ff7a00] via-[#ff007f] to-[#10c7a1]"
+            style={{ width: progressWidth }}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -713,54 +835,26 @@ function ImpactChain({ chain }) {
     <div className="rounded-[1.25rem] border border-white/10 bg-white/[0.045] p-4">
       <p className="text-sm font-black text-white">{chain.title}</p>
       <p className="mt-2 min-h-12 text-xs leading-5 text-white/52">{chain.copy}</p>
-      <div className="mt-4">
+      <div className="mt-4 space-y-3">
         {chain.steps.map((item, index) => (
-          <div key={item} className="flex flex-col items-center">
-            <div className="w-full rounded-2xl border border-white/10 bg-[#080d15] px-4 py-3 text-center text-base font-black text-white shadow-sm">
-              {item}
+          <div key={`${chain.title}-${item.label}`} className="flex flex-col items-center">
+            <div className="w-full rounded-2xl border border-white/10 bg-[#080d15]/92 p-4 shadow-sm">
+              <p className="text-center text-base font-black text-white">{item.label}</p>
+              {item.explanation && (
+                <p className="mx-auto mt-2 max-w-[18rem] text-center text-xs leading-5 text-white/48">
+                  {item.explanation}
+                </p>
+              )}
             </div>
-            {index < chain.steps.length - 1 && <ChevronDown className="my-2 h-6 w-6 text-[#7df3cc]/70" />}
+            {index < chain.steps.length - 1 && (
+              <div className="flex w-full flex-col items-center">
+                <div className="h-3 w-px bg-white/10" />
+                <ChevronDown className="my-1 h-5 w-5 text-[#7df3cc]/70" />
+                <div className="h-3 w-px bg-white/10" />
+              </div>
+            )}
           </div>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function ScoreGauge({ current, simulated }) {
-  const circumference = 2 * Math.PI * 44;
-  const offset = circumference - (simulated / 100) * circumference;
-
-  return (
-    <div className="flex w-fit items-center gap-5 rounded-[1.5rem] border border-white/10 bg-white/[0.055] p-4 backdrop-blur-xl">
-      <svg className="h-28 w-28 -rotate-90" viewBox="0 0 100 100">
-        <circle cx="50" cy="50" r="44" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="9" />
-        <circle
-          cx="50"
-          cy="50"
-          r="44"
-          fill="none"
-          stroke="url(#scoreGradient)"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          strokeWidth="9"
-        />
-        <defs>
-          <linearGradient id="scoreGradient" x1="0" x2="1" y1="0" y2="1">
-            <stop stopColor="#ff7a00" />
-            <stop offset="0.5" stopColor="#ff007f" />
-            <stop offset="1" stopColor="#10c7a1" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <div>
-        <p className="text-xs font-bold uppercase tracking-[0.24em] text-white/42">Twin Score</p>
-        <div className="mt-2 flex items-center gap-3">
-          <span className="text-3xl font-black text-white/45">{current}</span>
-          <ArrowRight className="h-5 w-5 text-white/38" />
-          <span className="text-5xl font-black text-white">{simulated}</span>
-        </div>
       </div>
     </div>
   );

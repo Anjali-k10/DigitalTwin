@@ -666,18 +666,55 @@ function updateGoalStreak(profile, goals) {
 }
 
 function buildStreakState(profile) {
+  const entries = Array.isArray(profile.completedDailyGoals)
+    ? profile.completedDailyGoals.map(normalizeStreakEntry)
+    : [];
+  const currentStreak = calculateCurrentStreak(entries, getDateKey(new Date()));
+
   return {
-    currentStreak: profile.currentStreak || 0,
-    streakStarted: Boolean(profile.streakStarted),
+    currentStreak: entries.length ? currentStreak : Number(profile.currentStreak || 0),
+    streakStarted: Boolean(profile.streakStarted || entries.length),
     lastGoalCompletionDate: profile.lastGoalCompletionDate || '',
-    completedDailyGoals: Array.isArray(profile.completedDailyGoals)
-      ? profile.completedDailyGoals.map((entry) => ({
-        date: entry.date,
-        goals: entry.goals || [],
-        completedAt: entry.completedAt,
-      }))
-      : [],
+    completedDailyGoals: entries,
   };
+}
+
+function normalizeStreakEntry(entry) {
+  const completedAtKey = entry.completedAt ? getDateKey(new Date(entry.completedAt)) : '';
+  const storedKey = typeof entry.date === 'string' ? entry.date : '';
+  const date = shouldPreferCompletedAtDate(storedKey, completedAtKey) ? completedAtKey : storedKey;
+
+  return {
+    date,
+    goals: entry.goals || [],
+    goalCompleted: entry.goalCompleted !== false,
+    completed: entry.completed !== false,
+    completedAt: entry.completedAt,
+  };
+}
+
+function shouldPreferCompletedAtDate(storedKey, completedAtKey) {
+  if (!storedKey || !completedAtKey || storedKey === completedAtKey) return false;
+  const storedTime = new Date(`${storedKey}T00:00:00`).getTime();
+  const completedTime = new Date(`${completedAtKey}T00:00:00`).getTime();
+  return Math.abs(completedTime - storedTime) <= 86400000;
+}
+
+function calculateCurrentStreak(entries, todayKey) {
+  const completedDates = new Set(
+    entries
+      .filter((entry) => entry.goalCompleted !== false && entry.completed !== false)
+      .map((entry) => entry.date),
+  );
+  let cursor = new Date(`${todayKey}T00:00:00`);
+  let streak = 0;
+
+  while (completedDates.has(getDateKey(cursor))) {
+    streak += 1;
+    cursor = addDays(cursor, -1);
+  }
+
+  return streak;
 }
 
 function buildMetricStates(profile) {
@@ -902,7 +939,7 @@ function getGenderThresholds(gender) {
 }
 
 function getDateKey(date) {
-  return date.toISOString().slice(0, 10);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 function addDays(date, days) {
