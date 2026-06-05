@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useGamification } from '../context/GamificationContext';
 import {
   disconnectCareerIntegration,
+  CAREER_DOMAIN_LABELS,
   fetchCareerIntegrations,
   normalizeCareerDomain,
   saveCareerIntegrations,
@@ -496,19 +497,186 @@ function buildBurnoutForecast(burnoutRisk, studyHours, sleepHours) {
   });
 }
 
-function buildCrossInsights(profile, analytics) {
+function buildCrossInsights({
+  profile,
+  analytics,
+  activeDomain,
+  activeIntegrations,
+  careerActivityCounts,
+  professionalGrowthStats,
+  professionalGrowthMetric,
+  dynamicCareerMetrics,
+}) {
   const insights = [];
   const studyH  = profile?.studyHours  || 4;
   const sleepH  = profile?.sleepHours  || 7;
   const burnout = analytics?.burnoutRisk ?? 50;
   const prod    = analytics?.productivityScore ?? 60;
   const fin     = analytics?.financialHealth ?? 60;
-  if (sleepH < 6 && studyH > 7) insights.push({ icon: '🔥', severity: 'critical', color: '#f87171', title: 'Sleep Debt × Study Overload', body: `${studyH}h study on ${sleepH}h sleep creates compounding cognitive debt. Problem-solving speed drops 22% per night of sub-6h sleep.`, action: 'Cap study at 6h and protect sleep above everything else this week.' });
-  if (burnout > 65 && prod < 60) insights.push({ icon: '⚠️', severity: 'warning', color: '#fbbf24', title: 'Burnout Risk × Productivity Gap', body: `Burnout at ${burnout}% with productivity at ${prod}/100 — you're working hard but outputting less.`, action: 'One full rest day recovers more output than pushing through.' });
-  if (fin < 50 && studyH > 6)    insights.push({ icon: '💸', severity: 'warning', color: '#fbbf24', title: 'Financial Pressure × Study Hours', body: `Financial stress combined with heavy study load kills focus. Anxiety occupies the same working memory you need for deep work.`, action: 'Resolve one pending financial task this week to free cognitive bandwidth.' });
-  if (burnout < 40 && prod > 70) insights.push({ icon: '🚀', severity: 'positive', color: '#4ade80', title: 'Recovery × Performance Alignment', body: `Burnout at ${burnout}% and productivity at ${prod}/100. This is your window — take on the hardest challenge you've been avoiding.`, action: 'This is your peak window — tackle the highest-difficulty item on your roadmap.' });
-  if (!insights.length) insights.push({ icon: '📡', severity: 'neutral', color: '#94a3b8', title: 'Signals Stable', body: 'Career, health, and finance signals are in balance. No critical cross-domain friction detected.', action: 'Maintain current rhythm and keep logging to improve prediction accuracy.' });
-  return insights;
+  const domain = normalizeCareerDomain(activeDomain);
+  const connectedProviders = Object.entries(activeIntegrations || {})
+    .filter(([, integration]) => Boolean(integration?.connected || integration?.profileUrl))
+    .map(([key]) => key);
+  const recent7 = sumRecentActivity(careerActivityCounts, 7);
+  const recent30 = sumRecentActivity(careerActivityCounts, 30);
+  const githubRepos = Number(professionalGrowthStats?.github?.repositories || 0);
+  const githubStars = Number(professionalGrowthStats?.github?.stars || 0);
+  const githubFollowers = Number(professionalGrowthStats?.github?.followers || 0);
+  const leetcodeSolved = Number(professionalGrowthStats?.leetcode?.solved || 0);
+  const leetcodeRating = Number(professionalGrowthStats?.leetcode?.contestRating || 0);
+  const growthScore = professionalGrowthMetric?.score;
+  const codingConsistency = dynamicCareerMetrics?.codingConsistency;
+  const careerMomentum = dynamicCareerMetrics?.careerMomentum;
+
+  if (!connectedProviders.length) {
+    insights.push({
+      icon: '🔌',
+      severity: 'warning',
+      color: '#fbbf24',
+      title: 'Career Signals Are Not Connected',
+      body: `No ${CAREER_DOMAIN_LABELS[domain] || 'career'} integrations are connected, so your twin can only use onboarding values like ${studyH}h study, ${sleepH}h sleep, productivity ${prod}/100, and burnout ${burnout}%.`,
+      action: domain === 'software'
+        ? 'Connect GitHub or LeetCode first so alerts can use real coding activity.'
+        : 'Connect the domain-specific profile cards above so alerts can use your real portfolio and professional signals.',
+    });
+  }
+
+  if (sleepH < 6 && studyH > 6) {
+    insights.push({
+      icon: '🔥',
+      severity: 'critical',
+      color: '#f87171',
+      title: 'Recovery Is Limiting Career Output',
+      body: `${studyH}h study on ${sleepH}h sleep raises burnout risk to ${burnout}% and can reduce the value of your learning time, even when productivity reads ${prod}/100.`,
+      action: 'Protect at least one extra hour of sleep before increasing study workload.',
+    });
+  }
+
+  if (domain === 'software' && connectedProviders.length > 0) {
+    if (recent30 === 0) {
+      insights.push({
+        icon: '📉',
+        severity: 'warning',
+        color: '#fbbf24',
+        title: 'Connected Coding Profiles Show No Recent Activity',
+        body: `GitHub/LeetCode are connected, but the last 30 days show 0 detected activity. That makes coding consistency ${codingConsistency ?? 0}/100 and weakens career momentum.`,
+        action: 'Add one small commit or solve one problem today to restart the activity signal.',
+      });
+    } else if (recent7 >= 5 && burnout > 55) {
+      insights.push({
+        icon: '⚠️',
+        severity: 'warning',
+        color: '#fbbf24',
+        title: 'Strong Coding Push With Burnout Pressure',
+        body: `Your connected profiles show ${recent7} coding activities in the last 7 days while burnout is ${burnout}%. Momentum is real, but recovery risk is rising.`,
+        action: 'Keep the streak, but schedule one low-intensity recovery block this week.',
+      });
+    } else if (recent30 > 0 && prod >= 70) {
+      insights.push({
+        icon: '🚀',
+        severity: 'positive',
+        color: '#4ade80',
+        title: 'Productivity Matches Real Coding Activity',
+        body: `${recent30} detected coding activities in 30 days plus productivity ${prod}/100 means your output signal is backed by actual profile data.`,
+        action: 'Use this window for one visible project milestone or a focused LeetCode set.',
+      });
+    }
+
+    if (growthScore != null && growthScore < 35 && (githubRepos > 0 || leetcodeSolved > 0)) {
+      insights.push({
+        icon: '🧭',
+        severity: 'warning',
+        color: '#fbbf24',
+        title: 'Activity Exists But Professional Signal Is Thin',
+        body: `Your profile has ${githubRepos} repos, ${githubStars} stars, ${githubFollowers} followers, and ${leetcodeSolved} solved problems, but professional growth is only ${growthScore}/100.`,
+        action: 'Turn one active repo or solved-problem theme into a portfolio-ready project summary.',
+      });
+    }
+
+    if (leetcodeRating >= 1600 || leetcodeSolved >= 300) {
+      insights.push({
+        icon: '🏆',
+        severity: 'positive',
+        color: '#4ade80',
+        title: 'Problem-Solving Signal Can Lift Career Readiness',
+        body: `LeetCode shows ${leetcodeSolved} solved problems${leetcodeRating ? ` and rating ${leetcodeRating}` : ''}. That can support interview readiness if paired with visible projects.`,
+        action: 'Match this algorithm strength with one GitHub project that demonstrates product thinking.',
+      });
+    }
+  }
+
+  if (domain === 'business' && connectedProviders.length > 0) {
+    if (!activeIntegrations.linkedin?.connected) {
+      insights.push({
+        icon: '🌐',
+        severity: 'warning',
+        color: '#fbbf24',
+        title: 'Business Domain Missing Network Signal',
+        body: 'Portfolio or business profile data is present, but LinkedIn is not connected. That limits network-strength analysis for MBA and business growth.',
+        action: 'Add LinkedIn so the business profile signal connects to professional network strength.',
+      });
+    } else {
+      insights.push({
+        icon: '📈',
+        severity: fin < 50 ? 'warning' : 'positive',
+        color: fin < 50 ? '#fbbf24' : '#4ade80',
+        title: fin < 50 ? 'Business Growth May Be Under Finance Pressure' : 'Business Profile Supports Cross-Domain Growth',
+        body: `LinkedIn is connected for the business domain while finance health is ${fin}/100 and productivity is ${prod}/100. This links professional presence with execution capacity.`,
+        action: fin < 50 ? 'Balance networking or MBA workload with one finance-stability action this week.' : 'Use the connected profile to track networking and thought-leadership progress.',
+      });
+    }
+  }
+
+  if (domain === 'creative' && connectedProviders.length > 0) {
+    if (!activeIntegrations.portfolio?.connected && !activeIntegrations.behance?.connected) {
+      insights.push({
+        icon: '🎨',
+        severity: 'warning',
+        color: '#fbbf24',
+        title: 'Creative Domain Missing Portfolio Proof',
+        body: 'Creative domain is selected, but no portfolio or Behance/Dribbble link is connected. The twin cannot verify project output yet.',
+        action: 'Connect a portfolio or Behance/Dribbble profile so creative output can influence alerts.',
+      });
+    } else {
+      insights.push({
+        icon: '✨',
+        severity: burnout > 65 ? 'warning' : 'positive',
+        color: burnout > 65 ? '#fbbf24' : '#4ade80',
+        title: burnout > 65 ? 'Creative Output Needs Recovery Protection' : 'Creative Proof Is Connected',
+        body: `Creative profile data is connected with productivity ${prod}/100 and burnout ${burnout}%. This lets the twin connect portfolio output with health and focus pressure.`,
+        action: burnout > 65 ? 'Reduce scope on one creative task and protect recovery before starting a new project.' : 'Keep portfolio updates frequent so your creative signal stays current.',
+      });
+    }
+  }
+
+  if (fin < 45 && studyH > 5) {
+    insights.push({
+      icon: '💸',
+      severity: 'warning',
+      color: '#fbbf24',
+      title: 'Finance Pressure Can Drain Career Focus',
+      body: `Financial health is ${fin}/100 while study load is ${studyH}h/day. Money stress can compete with deep work and interview preparation.`,
+      action: 'Resolve one finance task before adding more study hours.',
+    });
+  }
+
+  if (!insights.length) {
+    insights.push({
+      icon: '📡',
+      severity: 'neutral',
+      color: '#94a3b8',
+      title: 'Live Signals Need More Contrast',
+      body: `Current data shows productivity ${prod}/100, burnout ${burnout}%, finance ${fin}/100, ${connectedProviders.length} connected career profile(s), and ${recent30} detected coding activities in 30 days.`,
+      action: 'Change one input or connect one more profile to give the twin a stronger signal to analyze.',
+    });
+  }
+
+  return insights.slice(0, 4);
+}
+
+function sumRecentActivity(activityCounts = {}, days = 30) {
+  const keys = buildRecentDateKeys(days);
+  return keys.reduce((sum, key) => sum + Number(activityCounts[key] || 0), 0);
 }
 
 // ─── Platform Integration Card ────────────────────────────────────────────────
@@ -1262,7 +1430,25 @@ export default function Career() {
   ];
 
   const forecast      = useMemo(() => buildBurnoutForecast(burnoutRisk, profile?.studyHours, profile?.sleepHours), [burnoutRisk, profile]);
-  const crossInsights = useMemo(() => buildCrossInsights(profile, analytics), [profile, analytics]);
+  const crossInsights = useMemo(() => buildCrossInsights({
+    profile,
+    analytics,
+    activeDomain,
+    activeIntegrations: activeDomainIntegrations,
+    careerActivityCounts,
+    professionalGrowthStats,
+    professionalGrowthMetric,
+    dynamicCareerMetrics,
+  }), [
+    profile,
+    analytics,
+    activeDomain,
+    activeDomainIntegrations,
+    careerActivityCounts,
+    professionalGrowthStats,
+    professionalGrowthMetric,
+    dynamicCareerMetrics,
+  ]);
   const domainConfig  = DOMAINS[activeDomain] || DOMAINS.coding;
   const activeIntegrationRows = CAREER_LINK_ROWS[normalizedActiveDomain] || CAREER_LINK_ROWS.software;
 
@@ -1283,9 +1469,7 @@ export default function Career() {
               {profileLoading ? 'Loading your career signals…' :
                burnoutRisk != null && burnoutRisk > 65
                 ? `Burnout risk is at ${burnoutRisk}% — recovery is the highest-leverage career move right now.`
-                : prodScore != null && prodScore >= 75
-                ? `Productivity at ${prodScore}/100 with ${codingScore}/100 coding consistency. You're in a strong window — use it.`
-                : 'Connect your career platforms below to unlock live intelligence.'}
+                : ''}
             </p>
           </div>
           <button onClick={fetchDashProfile} disabled={profileLoading}
