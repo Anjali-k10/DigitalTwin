@@ -5,13 +5,15 @@ import { useGamification } from '../context/GamificationContext';
 import {
   disconnectCareerIntegration,
   fetchCareerIntegrations,
+  normalizeCareerDomain,
   saveCareerIntegrations,
+  selectCareerDomainIntegrations,
 } from '../features/careerIntegrations/careerIntegrationSlice';
 import {
   Code2, TrendingUp, AlertTriangle, Zap, Target, Activity,
   ChevronDown, ChevronUp, Sparkles, RefreshCw, Award,
   CheckCircle, Loader2, X, Plus, Link, ExternalLink,
-  Briefcase, Palette, Terminal, BookOpen, BarChart2,
+  Briefcase, Palette, Terminal, BookOpen, BarChart2, Globe,
   Users, Star, GitCommit, Trophy, Hash, Pencil,
 } from 'lucide-react';
 import { fetchCareerIntegrationStats, getCareerProfileLabel } from '../utils/careerIntegrationStats';
@@ -118,22 +120,22 @@ const DOMAINS = {
         profileUrl: (u) => u,
       },
       {
-        id:          'scholar',
-        name:        'Google Scholar',
-        color:       '#4285f4',
-        icon:        BookOpen,
-        placeholder: 'Your Scholar profile URL',
+        id:          'portfolio',
+        name:        'Professional Portfolio / Personal Website',
+        color:       '#fbbf24',
+        icon:        Globe,
+        placeholder: 'https://your-portfolio.com',
         endpoint:    null,
         comingSoon:  true,
         statsMap:    () => [],
         profileUrl:  (u) => u,
       },
       {
-        id:          'crunchbase',
-        name:        'Crunchbase',
+        id:          'businessProfile',
+        name:        'MBA / Business Profile Link',
         color:       '#10c7a1',
         icon:        BarChart2,
-        placeholder: 'Your Crunchbase profile URL',
+        placeholder: 'https://medium.com/@your-name',
         endpoint:    null,
         comingSoon:  true,
         statsMap:    () => [],
@@ -149,40 +151,112 @@ const DOMAINS = {
     desc:     'Track your portfolio, follower growth, and creative output across platforms.',
     platforms: [
       {
+        id:          'portfolio',
+        name:        'Portfolio Website',
+        color:       '#fbbf24',
+        icon:        Globe,
+        placeholder: 'https://your-portfolio.com',
+        endpoint:    null,
+        comingSoon:  true,
+        statsMap:    () => [],
+        profileUrl:  (u) => u,
+      },
+      {
+        id:          'linkedin',
+        name:        'LinkedIn',
+        color:       '#7b61ff',
+        icon:        Briefcase,
+        placeholder: 'https://linkedin.com/in/your-name',
+        endpoint:    null,
+        comingSoon:  true,
+        statsMap:    () => [],
+        profileUrl:  (u) => u,
+      },
+      {
         id:          'behance',
-        name:        'Behance',
+        name:        'Behance / Dribbble',
         color:       '#1769ff',
         icon:        Palette,
-        placeholder: 'your-username',
+        placeholder: 'https://behance.net/your-name or https://dribbble.com/your-name',
         endpoint:    null,
         comingSoon:  true,
         statsMap:    () => [],
-        profileUrl:  (u) => `https://www.behance.net/${u}`,
-      },
-      {
-        id:          'dribbble',
-        name:        'Dribbble',
-        color:       '#ff4d7d',
-        icon:        Palette,
-        placeholder: 'your-username',
-        endpoint:    null,
-        comingSoon:  true,
-        statsMap:    () => [],
-        profileUrl:  (u) => `https://dribbble.com/${u}`,
-      },
-      {
-        id:          'youtube',
-        name:        'YouTube',
-        color:       '#ff0000',
-        icon:        BarChart2,
-        placeholder: '@your-channel',
-        endpoint:    null,
-        comingSoon:  true,
-        statsMap:    () => [],
-        profileUrl:  (u) => `https://youtube.com/${u}`,
+        profileUrl:  (u) => u,
       },
     ],
   },
+};
+
+const CAREER_LINK_ROWS = {
+  software: [
+    {
+      key: 'github',
+      label: 'GitHub',
+      icon: GithubIcon,
+      placeholder: 'https://github.com/anjali',
+      metricLabels: ['Repositories', 'Followers', 'Stars'],
+    },
+    {
+      key: 'leetcode',
+      label: 'LeetCode',
+      icon: Code2,
+      placeholder: 'https://leetcode.com/u/anjali',
+      metricLabels: ['Problems Solved', 'Contest Rating', 'Rank'],
+    },
+    {
+      key: 'linkedin',
+      label: 'LinkedIn',
+      icon: Briefcase,
+      placeholder: 'https://linkedin.com/in/anjali',
+      metricLabels: ['Profile URL', 'Professional Network'],
+    },
+  ],
+  business: [
+    {
+      key: 'linkedin',
+      label: 'LinkedIn',
+      icon: Briefcase,
+      placeholder: 'https://linkedin.com/in/anjali',
+      metricLabels: ['Network strength'],
+    },
+    {
+      key: 'portfolio',
+      label: 'Professional Portfolio / Personal Website',
+      icon: Globe,
+      placeholder: 'https://your-portfolio.com',
+      metricLabels: ['Content count', 'Activity'],
+    },
+    {
+      key: 'businessProfile',
+      label: 'MBA / Business Profile Link',
+      icon: BarChart2,
+      placeholder: 'https://medium.com/@your-name',
+      metricLabels: ['Professional presence'],
+    },
+  ],
+  creative: [
+    {
+      key: 'portfolio',
+      label: 'Portfolio Website',
+      icon: Globe,
+      placeholder: 'https://your-portfolio.com',
+      metricLabels: ['Projects'],
+    },
+    {
+      key: 'linkedin',
+      label: 'LinkedIn',
+      icon: Briefcase,
+      placeholder: 'https://linkedin.com/in/anjali',
+      metricLabels: ['Professional profile'],
+    },
+    {
+      key: 'behance',
+      label: 'Behance / Dribbble',
+      icon: Palette,
+      placeholder: 'https://behance.net/your-name or https://dribbble.com/your-name',
+      metricLabels: ['Creative work', 'Design shots'],
+    },
+  ],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -791,7 +865,7 @@ function CompactHeatmap({ careerIntegrations }) {
   );
 }
 
-function CareerLinkCard({ provider, label, icon: Icon, placeholder, integration, saving, onSave, onDisconnect }) {
+function CareerLinkCard({ provider, label, icon: Icon, placeholder, metricLabels = [], integration, saving, onSave, onDisconnect }) {
   const [input, setInput] = useState(integration.profileUrl || '');
   const [editing, setEditing] = useState(!integration.connected);
   const [stats, setStats] = useState(null);
@@ -886,6 +960,13 @@ function CareerLinkCard({ provider, label, icon: Icon, placeholder, integration,
         />
       )}
 
+      {connected && !['github', 'leetcode'].includes(provider) && metricLabels.length > 0 && (
+        <CareerStatsChips
+          loading={false}
+          items={metricLabels.map((metric) => ['Connected', metric])}
+        />
+      )}
+
       {connected && integration.profileUrl && (
         <a href={integration.profileUrl} target="_blank" rel="noreferrer"
           className="mb-3 flex items-center gap-2 truncate rounded-xl border border-white/8 bg-white/[0.035] px-3 py-2 text-sm font-semibold text-[#7df3cc]/80 hover:text-[#7df3cc]">
@@ -960,6 +1041,11 @@ export default function Career() {
   });
   const [activeDomain, setActiveDomain]     = useState(
     () => localStorage.getItem('career_domain') || 'coding'
+  );
+  const normalizedActiveDomain = normalizeCareerDomain(activeDomain);
+  const activeDomainIntegrations = useMemo(
+    () => selectCareerDomainIntegrations({ careerIntegrations }, activeDomain),
+    [careerIntegrations, activeDomain],
   );
 
   useEffect(() => {
@@ -1039,17 +1125,18 @@ export default function Career() {
   ]);
 
   const saveCareerLinks = async (links) => {
-    await dispatch(saveCareerIntegrations(links)).unwrap();
+    await dispatch(saveCareerIntegrations({ domain: activeDomain, links })).unwrap();
   };
 
   const disconnectCareerLink = async (provider) => {
-    await dispatch(disconnectCareerIntegration(provider)).unwrap();
+    await dispatch(disconnectCareerIntegration({ domain: activeDomain, provider })).unwrap();
   };
 
   // Persist domain choice
   const handleDomainChange = (d) => {
     setActiveDomain(d);
     localStorage.setItem('career_domain', d);
+    window.dispatchEvent(new Event('career-domain-updated'));
   };
 
   async function fetchDashProfile() {
@@ -1176,7 +1263,8 @@ export default function Career() {
 
   const forecast      = useMemo(() => buildBurnoutForecast(burnoutRisk, profile?.studyHours, profile?.sleepHours), [burnoutRisk, profile]);
   const crossInsights = useMemo(() => buildCrossInsights(profile, analytics), [profile, analytics]);
-  const domainConfig  = DOMAINS[activeDomain];
+  const domainConfig  = DOMAINS[activeDomain] || DOMAINS.coding;
+  const activeIntegrationRows = CAREER_LINK_ROWS[normalizedActiveDomain] || CAREER_LINK_ROWS.software;
 
   const productivityInsight = aiInsights.find(i => i.label === 'Productivity');
   const burnoutInsight      = aiInsights.find(i => i.label === 'Burnout Risk');
@@ -1244,36 +1332,20 @@ export default function Career() {
               </p>
             </div>
             <div className="space-y-3">
-              <CareerLinkCard
-                provider="github"
-                label="GitHub"
-                icon={GithubIcon}
-                placeholder="https://github.com/anjali"
-                integration={careerIntegrations.github}
-                saving={careerIntegrations.saving}
-                onSave={saveCareerLinks}
-                onDisconnect={disconnectCareerLink}
-              />
-              <CareerLinkCard
-                provider="leetcode"
-                label="LeetCode"
-                icon={Code2}
-                placeholder="https://leetcode.com/u/anjali"
-                integration={careerIntegrations.leetcode}
-                saving={careerIntegrations.saving}
-                onSave={saveCareerLinks}
-                onDisconnect={disconnectCareerLink}
-              />
-              <CareerLinkCard
-                provider="linkedin"
-                label="LinkedIn"
-                icon={Briefcase}
-                placeholder="https://linkedin.com/in/anjali"
-                integration={careerIntegrations.linkedin}
-                saving={careerIntegrations.saving}
-                onSave={saveCareerLinks}
-                onDisconnect={disconnectCareerLink}
-              />
+              {activeIntegrationRows.map((row) => (
+                <CareerLinkCard
+                  key={row.key}
+                  provider={row.key}
+                  label={row.label}
+                  icon={row.icon}
+                  placeholder={row.placeholder}
+                  metricLabels={row.metricLabels}
+                  integration={activeDomainIntegrations[row.key] || { connected: false, profileUrl: '' }}
+                  saving={careerIntegrations.saving}
+                  onSave={saveCareerLinks}
+                  onDisconnect={disconnectCareerLink}
+                />
+              ))}
             </div>
             {careerIntegrations.error && (
               <p className="mt-3 rounded-xl border border-[#ff4d7d]/20 bg-[#ff4d7d]/8 px-3 py-2 text-sm text-[#ff8fbd]">
@@ -1284,7 +1356,7 @@ export default function Career() {
 
           {/* Compact heatmap */}
           <div className="mt-6 pt-5 border-t border-white/8">
-            <CompactHeatmap careerIntegrations={careerIntegrations} />
+            <CompactHeatmap careerIntegrations={normalizedActiveDomain === 'software' ? careerIntegrations : activeDomainIntegrations} />
           </div>
 
           {/* LeetCode quick stats if connected — coding domain */}
