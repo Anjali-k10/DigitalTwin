@@ -38,6 +38,7 @@ export const submitDailyUpdate = createAsyncThunk(
         { headers: authHeaders() },
       );
       window.dispatchEvent(new Event('daily-update-completed'));
+      window.dispatchEvent(new Event('dashboard-data-updated'));
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Unable to submit daily update.');

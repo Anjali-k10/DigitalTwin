@@ -1069,46 +1069,21 @@ export default function Career() {
   async function fetchCareerDebrief() {
     setDebriefLoading(true); setDebriefError(''); setDebriefText(null);
     try {
-      const pr = dashProfile?.profile    || {};
-      const an = dashProfile?.analytics  || {};
-      const gh = dashProfile?.githubData || {};
-      const lc = dashProfile?.leetcodeData || {};
-      const li = dashProfile?.linkedinData || {};
-      const lines = [
-        'You are a direct, warm career coach inside a Digital Twin app. Speak in second person.',
-        'Write EXACTLY 3 sentences. No lists, no headers, no markdown.',
-        'Sentence 1: Summarise what the data says about their career trajectory today — use specific numbers.',
-        'Sentence 2: Name the single biggest opportunity or risk in their career right now.',
-        'Sentence 3: Give one concrete, high-leverage action for this week.',
-        '',
-        'USER DATA:',
-        `Career domain: ${DOMAINS[activeDomain]?.label}.`,
-        `Burnout risk: ${an.burnoutRisk ?? 'unknown'}%.`,
-        `Productivity score: ${an.productivityScore ?? 'unknown'}/100.`,
-        `Coding consistency: ${an.codingConsistency ?? 'unknown'}/100.`,
-        `Career momentum: ${an.careerMomentum ?? 'unknown'}/100.`,
-        gh.connected ? `GitHub: ${gh.recentActivityCount} recent commits, ${gh.publicRepos} public repos, ${gh.followers} followers.` : 'GitHub not connected.',
-        lc.connected ? `LeetCode: ${lc.totalSolved} problems solved (${lc.hardSolved} hard), ${lc.acceptanceRate}% acceptance.` : 'LeetCode not connected.',
-        li.connected ? `LinkedIn profile strength: ${li.profileStrength}%.` : 'LinkedIn not connected.',
-        pr.studyHours ? `Studies ${pr.studyHours} hours/day.` : '',
-        pr.sleepHours ? `Sleeps ${pr.sleepHours} hours/night.` : '',
-      ].filter(Boolean).join('\n');
-
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: lines }],
-        }),
+      const res = await axios.post(`${API}/api/ai/career-debrief`, {
+        activeDomain
+      }, {
+        headers: { Authorization: `Bearer ${token()}` }
       });
-      const data = await res.json();
-      const text = data?.content?.find(b => b.type === 'text')?.text?.trim() || '';
-      if (text) setDebriefText(text);
-      else setDebriefError('Could not generate your debrief — try again.');
-    } catch { setDebriefError('AI service unreachable. Check your connection.'); }
-    finally { setDebriefLoading(false); }
+      if (res.data?.success && res.data?.debrief) {
+        setDebriefText(res.data.debrief);
+      } else {
+        setDebriefError('Could not generate your debrief — try again.');
+      }
+    } catch (err) {
+      setDebriefError(err.response?.data?.message || 'Could not generate your debrief — try again.');
+    } finally {
+      setDebriefLoading(false);
+    }
   }
 
   // Derived

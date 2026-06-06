@@ -28,41 +28,65 @@ router.post('/evaluate-sync', authenticateToken, async (req, res) => {
     let xpEarnedThisSync = 0;
     let newLogs = [];
 
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
     // ==========================================
-    // 2. THE LOGIC RULES (Now Crash-Proof with '?.' Optional Chaining)
+    // 2. THE LOGIC RULES (Now Crash-Proof with '?.' Optional Chaining & Daily Deduplication)
     // ==========================================
 
     // Rule 1: Health Goal - Steps
-    if (healthData?.metrics?.steps >= 8000) {
+    const hasStepsToday = profile.history.some(h => h.emoji === '👟' && new Date(h.timestamp) >= todayStart);
+    if (healthData?.metrics?.steps >= 8000 && !hasStepsToday) {
       xpEarnedThisSync += 50;
       newLogs.push({ activity: `Hit daily movement target (${healthData.metrics.steps} steps)`, points: 50, emoji: '👟' });
     }
 
     // Rule 2: Health Goal - Deep Recovery
-    if (healthData?.metrics?.sleepHours >= 7 && healthData?.metrics?.hrv > 60) {
+    const hasSleepToday = profile.history.some(h => h.emoji === '💤' && new Date(h.timestamp) >= todayStart);
+    if (healthData?.metrics?.sleepHours >= 7 && healthData?.metrics?.hrv > 60 && !hasSleepToday) {
       xpEarnedThisSync += 75;
       newLogs.push({ activity: 'Optimal sleep & HRV recovery detected', points: 75, emoji: '💤' });
     }
 
     // Rule 3: Finance Goal - Credit / Savings
-    if (financeData?.creditScore >= 750) {
+    const hasCreditToday = profile.history.some(h => h.emoji === '🏦' && new Date(h.timestamp) >= todayStart);
+    if (financeData?.creditScore >= 750 && !hasCreditToday) {
       xpEarnedThisSync += 100;
       newLogs.push({ activity: `Maintained Prime Credit (${financeData.creditScore})`, points: 100, emoji: '🏦' });
     }
 
     // Rule 4: Career Goal - Deep Work (Fixed path to githubCommitsThisWeek)
-    if (careerData?.githubCommitsThisWeek > 20) {
+    const hasCommitsToday = profile.history.some(h => h.emoji === '💻' && new Date(h.timestamp) >= todayStart);
+    if (careerData?.githubCommitsThisWeek > 20 && !hasCommitsToday) {
       xpEarnedThisSync += 60;
       newLogs.push({ activity: `High-volume deep work session verified (${careerData.githubCommitsThisWeek} commits)`, points: 60, emoji: '💻' });
     }
 
     // ==========================================
-    // 3. APPLY UPDATES & UNLOCK BADGES
+    // 3. APPLY UPDATES & UNLOCK BADGES & SEND NOTIFICATIONS
     // ==========================================
     
     // Only update if points were actually earned
     let newlyUnlockedBadges = [];
     if (xpEarnedThisSync > 0) {
+      // Send notifications for each new log
+      try {
+        const { createNotification } = await import('../services/notificationService.js');
+        for (const log of newLogs) {
+          await createNotification({
+            userId,
+            category: 'goal',
+            subType: 'completed',
+            title: '🏆 Achievement Unlocked!',
+            message: `Hey Champ! +${log.points} XP earned for ${log.activity}.`,
+            priority: 'medium',
+            sendEmail: false
+          });
+        }
+      } catch (err) {
+        console.error('Failed to create evaluation notification:', err.message);
+      }
       profile.totalXP += xpEarnedThisSync;
       profile.level = Math.floor(profile.totalXP / 500) + 1; // Level up every 500 XP
       

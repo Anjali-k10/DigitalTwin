@@ -23,6 +23,41 @@ import { GamificationProvider } from './context/GamificationContext';
 import { IntegrationProvider } from './context/IntegrationContext';
 import { DashboardSyncProvider } from './context/DashboardSyncContext';
 import ToastOverlay from './components/ToastOverlay';
+import axios from 'axios';
+
+// Set up global response interceptor to detect successful data mutation requests
+axios.interceptors.response.use(
+  (response) => {
+    const url = response.config?.url || '';
+    const method = response.config?.method?.toLowerCase() || '';
+
+    const isMutative = ['post', 'put', 'delete', 'patch'].includes(method) && (
+      url.includes('/api/goals') ||
+      url.includes('/api/health') ||
+      url.includes('/api/finance') ||
+      url.includes('/api/career') ||
+      url.includes('/api/daily-update') ||
+      url.includes('/api/gamification') ||
+      url.includes('/api/integrations') ||
+      url.includes('/api/ai')
+    );
+
+    // Check if the response was successful and represents a mutative action affecting goals/gamification
+    if (
+      response.status >= 200 &&
+      response.status < 300 &&
+      isMutative
+    ) {
+      console.log(`[Axios Interceptor] Ingestion/Sync request success to ${url}, dispatching dashboard-data-updated and gamification-updated events.`);
+      window.dispatchEvent(new Event('dashboard-data-updated'));
+      window.dispatchEvent(new Event('gamification-updated'));
+    }
+    return response;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 function App() {
   return (

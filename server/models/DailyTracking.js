@@ -47,6 +47,7 @@ const dailyTrackingSchema = new mongoose.Schema({
 // the NEW delta added this save — not the full day total.
 dailyTrackingSchema.post('save', async function (doc) {
   try {
+    if (doc._skipGoalSync) return;
     // Lazy import to avoid circular dependency issues
     const { default: GoalSyncEngine } = await import('../services/GoalSyncEngine.js');
 

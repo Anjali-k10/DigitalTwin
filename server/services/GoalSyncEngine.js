@@ -188,11 +188,12 @@ async function syncGoalsFromDailyLog(userId, dailyLog, prevSnapshot = null) {
         ? 'GOAL_COMPLETED'
         : 'GOAL_PROGRESS_LOGGED';
 
-      await GamificationEngine.logEvent(userId, eventName, {
+      const gamificationResult = await GamificationEngine.logEvent(userId, eventName, {
         goalId:    goal._id,
         autoSync:  true,
         addedValue: added,
       });
+      const xpEarned = gamificationResult ? gamificationResult.xpAwarded : 0;
 
       updatedGoals.push({
         goalId:    goal._id,
@@ -203,6 +204,7 @@ async function syncGoalsFromDailyLog(userId, dailyLog, prevSnapshot = null) {
         target:    goal.targetMetric,
         unit:      goal.unit,
         completed: goal.status === 'completed',
+        xpEarned:  xpEarned,
       });
     }
   }

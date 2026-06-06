@@ -31,11 +31,11 @@ const itemVariants = {
 const fallbackProfile = {
   behavioralAnalysis: { focusAreas: ['productivity', 'finance', 'health'] },
   integrations: {
-    github: { status: 'connected', username: 'anjali-dev' },
-    leetcode: { status: 'connected', username: 'anjali-codes' },
-    fitbit: { status: 'skipped' },
-    linkedin: { status: 'connected', profileLink: 'linkedin' },
-    banking: { status: 'skipped' },
+    github: { status: 'disconnected', username: '' },
+    leetcode: { status: 'disconnected', username: '' },
+    fitbit: { status: 'disconnected' },
+    linkedin: { status: 'disconnected', profileLink: '' },
+    banking: { status: 'disconnected' },
   },
   lifestyle: { gender: '', sleepHours: 6, studyHours: 5, exerciseFrequency: 2, spendingStyle: 'balanced', smokingHabits: 'no', periodTracking: 'not_now', genderSpecificHealthContext: 'not_now' },
   financialPatterns: { monthlyIncome: '52000', monthlyExpenditure: '34000', savingsHabits: 'moderate', financialStressLevel: 5 },
@@ -169,9 +169,22 @@ function GamifiedJourneyMap({ totalXP, level, history, unlockedBadges, available
   const progressPercent = Math.min(((totalXP % 500) / 500) * 100, 100);
 
   // Use live context first, fall back to profile for SSR / loading state
-  const isConnected = (key) =>
-    liveIntegrations?.[key]?.status === 'connected' ||
-    profile?.integrations?.[key]?.status === 'connected';
+  const isConnected = (key) => {
+    if (liveIntegrations?.[key]?.status === 'connected') return true;
+    if (profile?.integrations?.[key]?.status === 'connected') return true;
+    
+    const linkKeys = {
+      github: 'githubUsername',
+      leetcode: 'leetcodeUsername',
+      fitbit: 'fitbitProfile',
+      linkedin: 'linkedinProfile',
+      banking: 'bankingProfile'
+    };
+    const field = linkKeys[key];
+    if (field && profile?.[field]) return true;
+
+    return false;
+  };
 
   // Fallback to static milestones if backend badges haven't loaded yet
   const fallbackMilestones = [

@@ -2,6 +2,7 @@ import UserGamification from '../models/UserGamification.js';
 import ActivityLog from '../models/ActivityLog.js';
 import BadgeDefinition from '../models/BadgeDefinition.js';
 import LifeProfile from '../models/LifeProfile.js';
+
 const XP_TABLE = {
   EXPENSE_LOGGED: { xp: 10, domain: 'finance' },
   BUDGET_MET: { xp: 30, domain: 'finance' },
@@ -20,7 +21,6 @@ const XP_TABLE = {
   GOAL_MILESTONE_HIT: { xp: 50, domain: 'career' },
   GOAL_PROGRESS_LOGGED: { xp: 5,  domain: 'career' },
   GOAL_COMPLETED:       { xp: 100, domain: 'career' },
-  
 };
 
 // Calculate level based on XP (Level 1: 0-99, Level 2: 100-249, Level 3: 250-499...)
@@ -45,22 +45,69 @@ function isToday(lastDate, currentDate) {
   return lastDate.toDateString() === currentDate.toDateString();
 }
 
+const recentGoalTriggers = new Map();
+
 class GamificationEngine {
   static async logEvent(userId, eventName, metadata = {}) {
+    console.log(`[GamificationEngine] logEvent called: userId=${userId}, eventName=${eventName}, metadata=`, metadata);
     try {
+      // 1. Deduplicate triggers for the same goalId within 3 seconds
+      if (metadata?.goalId) {
+        const lastTrigger = recentGoalTriggers.get(metadata.goalId.toString());
+        const nowMs = Date.now();
+        if (lastTrigger && nowMs - lastTrigger < 3000) {
+          console.log(`[GamificationEngine] Rejected duplicate trigger for goalId=${metadata.goalId}`);
+          return null; // Silently reject duplicate goal trigger
+        }
+        recentGoalTriggers.set(metadata.goalId.toString(), nowMs);
+      }
+
+      // 2. Strict numeric verification on addedValue
+      const addedValue = metadata?.addedValue;
+      if (addedValue === undefined || addedValue === null) {
+        return null; // Silently reject if undefined or null
+      }
+      
+      const val = Number(addedValue);
+      if (isNaN(val) || val <= 0) {
+        return null; // Silently reject if not a valid number greater than 0
+      }
+
+      // 3. Delta Checking: verify if it represents a NEW achievement or positive delta compared to today's last log
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const query = { userId, event: eventName, createdAt: { $gte: todayStart } };
+      if (metadata?.goalId) {
+        query['metadata.goalId'] = metadata.goalId;
+      }
+      
+      const lastLogToday = await ActivityLog.findOne(query).sort({ createdAt: -1 });
+      if (lastLogToday) {
+        const getMetric = (meta) => {
+          if (!meta) return 0;
+          return Number(meta.addedValue ?? meta.amount ?? meta.value ?? meta.hours ?? meta.duration ?? meta.durationMinutes ?? meta.calories ?? meta.studyHours ?? meta.githubCommits ?? meta.githubCommitsThisWeek ?? 0);
+        };
+        const newVal = getMetric(metadata);
+        const oldVal = getMetric(lastLogToday.metadata);
+        if (newVal <= oldVal) {
+          return null; // Silently reject if not a positive delta compared to today's last logged value
+        }
+      }
+
       const eventConfig = XP_TABLE[eventName];
       if (!eventConfig) return null;
 
       const { xp, domain } = eventConfig;
       const now = new Date();
 
-      // 1. Ensure user gamification profile exists
+      // Ensure user gamification profile exists
       let gamification = await UserGamification.findOne({ userId });
       if (!gamification) {
         gamification = new UserGamification({ userId });
       }
 
-      // 2. Append to ActivityLog
+      // Append to ActivityLog
       await ActivityLog.create({
         userId,
         domain,
@@ -69,14 +116,14 @@ class GamificationEngine {
         metadata
       });
 
-      // 3. Update XP and Level
+      // Update XP and Level
       gamification.totalXP += xp;
       gamification.weeklyXP += xp;
       const newLevel = calculateLevel(gamification.totalXP);
       const levelUp = newLevel > gamification.level;
       gamification.level = newLevel;
 
-      // 4. Update Streaks
+      // Update Streaks
       const currentDomainStreak = gamification.streaks[domain];
       if (!isToday(currentDomainStreak.lastActivity, now)) {
         if (isYesterday(currentDomainStreak.lastActivity, now)) {
@@ -90,7 +137,7 @@ class GamificationEngine {
         }
       }
 
-      // 5. Evaluate Badges
+      // Evaluate Badges
       const newBadges = [];
       const userBadgeIds = gamification.badges.map(b => b.badgeId);
       const allDefinitions = await BadgeDefinition.find({ domain });
@@ -118,6 +165,29 @@ class GamificationEngine {
       }
 
       await gamification.save();
+      console.log(`[GamificationEngine] Successfully saved gamification profile. new totalXP=${gamification.totalXP}, level=${gamification.level}`);
+
+      // Create matching database notification record
+      try {
+        const { createNotification } = await import('./notificationService.js');
+        let goalTitle = eventName.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+        if (metadata?.goalId) {
+          const SmartGoal = (await import('../models/SmartGoal.js')).default;
+          const goal = await SmartGoal.findById(metadata.goalId).lean();
+          if (goal) goalTitle = goal.title;
+        }
+        await createNotification({
+          userId,
+          category: 'goal',
+          subType: 'completed',
+          title: '🏆 Achievement Unlocked!',
+          message: `Hey Champ! +${xp} XP earned for ${goalTitle}.`,
+          priority: 'medium',
+          sendEmail: false
+        });
+      } catch (notiError) {
+        console.error('Failed to push gamification notification:', notiError);
+      }
 
       return {
         xpAwarded: xp,

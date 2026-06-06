@@ -46,7 +46,7 @@ router.post('/vitals', authenticateToken, async (req, res) => {
 
     await daily.save(); // post-save hook fires GoalSyncEngine
 
-    const gamification = await GamificationEngine.logEvent(userId, 'VITALS_LOGGED', { stressLevel, mood, waterLiters });
+    const gamification = await GamificationEngine.logEvent(userId, 'VITALS_LOGGED', { stressLevel, mood, waterLiters, addedValue: Number(waterLiters) || 1 });
     res.status(200).json({ success: true, gamification });
   } catch (error) {
     console.error('Vitals Error:', error);
@@ -72,7 +72,7 @@ router.post('/meds', authenticateToken, async (req, res) => {
     daily.health.medicationsTaken.push({ name: medName });
     await daily.save();
 
-    const gamification = await GamificationEngine.logEvent(userId, 'MEDS_TAKEN', { medName });
+    const gamification = await GamificationEngine.logEvent(userId, 'MEDS_TAKEN', { medName, addedValue: 1 });
     res.status(200).json({ success: true, gamification });
   } catch (error) {
     console.error('Meds Error:', error);

@@ -47,10 +47,14 @@ export function DashboardSyncProvider({ children }) {
     };
     window.addEventListener('daily-update-completed', handleUpdate);
     window.addEventListener('upload-history-updated', handleUpdate);
+    window.addEventListener('dashboard-data-updated', handleUpdate);
+    window.addEventListener('gamification-updated', handleUpdate);
 
     return () => {
       window.removeEventListener('daily-update-completed', handleUpdate);
       window.removeEventListener('upload-history-updated', handleUpdate);
+      window.removeEventListener('dashboard-data-updated', handleUpdate);
+      window.removeEventListener('gamification-updated', handleUpdate);
     };
   }, [fetchDashboard]);
 

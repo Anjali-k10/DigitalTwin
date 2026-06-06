@@ -41,12 +41,26 @@ router.post('/transaction', authenticateToken, async (req, res) => {
       daily.finance.moneyCredited = (daily.finance.moneyCredited || 0) + Number(amount);
     }
 
+    console.log(`[FinanceRoutes] /transaction: saving DailyTracking dailyLog for userId=${userId}`);
+    daily._skipGoalSync = true;
     await daily.save(); // post-save hook fires GoalSyncEngine
 
-    const eventName    = type === 'expense' ? 'EXPENSE_LOGGED' : 'INCOME_LOGGED';
-    const gamification = await GamificationEngine.logEvent(userId, eventName, { amount, category });
+    console.log(`[FinanceRoutes] /transaction: executing explicit GoalSyncEngine`);
+    const { default: GoalSyncEngine } = await import('../services/GoalSyncEngine.js');
+    const goalsUpdated = await GoalSyncEngine.syncGoalsFromDailyLog(
+      userId,
+      daily,
+      daily._prevSnapshot || null
+    );
 
-    res.status(200).json({ success: true, gamification });
+    const { GamificationService } = await import('../services/GamificationService.js');
+    const gamificationResult = await GamificationService.evaluateRules(userId);
+
+    const { default: GamificationProfile } = await import('../models/GamificationProfile.js');
+    const profile = await GamificationProfile.findOne({ userId });
+    const totalXP = profile ? profile.totalXP : 0;
+
+    res.status(200).json({ success: true, gamification: gamificationResult, totalXP, goalProgress: goalsUpdated, goalsUpdated });
   } catch (error) {
     console.error('Finance Transaction Error:', error);
     res.status(500).json({ success: false, message: 'Server Error' });

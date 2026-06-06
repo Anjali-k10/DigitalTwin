@@ -22,7 +22,7 @@ router.post('/', authenticateToken, async (req, res) => {
       userId, domain, title, description, targetMetric, unit, priority, deadline
     });
 
-    const gamification = await GamificationEngine.logEvent(userId, 'GOAL_SET', { goalId: newGoal._id });
+    const gamification = await GamificationEngine.logEvent(userId, 'GOAL_SET', { goalId: newGoal._id, addedValue: 1 });
     await createNotification({
       userId,
       category: 'goal',
@@ -228,7 +228,7 @@ router.patch('/:id/progress', authenticateToken, async (req, res) => {
 
     const eventName    = goal.status === 'completed' ? 'GOAL_COMPLETED' : 'GOAL_PROGRESS_LOGGED';
     const streakBonus  = goal.streak >= 7 ? 15 : goal.streak >= 3 ? 5 : 0;
-    const gamification = await GamificationEngine.logEvent(userId, eventName, { goalId: goal._id, streakBonus });
+    const gamification = await GamificationEngine.logEvent(userId, eventName, { goalId: goal._id, streakBonus, addedValue: addAmount });
     if (goal.status === 'completed') {
       await createNotification({
         userId,

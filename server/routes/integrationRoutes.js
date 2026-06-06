@@ -49,10 +49,13 @@ router.get('/health', authenticateToken, async (req, res) => {
     metrics: { steps, activeCalories, sleepHours, avgHeartRate, restingHeartRate: restingHR, hrv },
   };
 
+  let goalsUpdated = [];
+  let totalXP = 0;
   try {
+    const userId = req.user.userId;
     const todayStr = todayKey();
-    let daily = await DailyTracking.findOne({ userId: req.user.userId, dateString: todayStr });
-    if (!daily) daily = new DailyTracking({ userId: req.user.userId, dateString: todayStr });
+    let daily = await DailyTracking.findOne({ userId, dateString: todayStr });
+    if (!daily) daily = new DailyTracking({ userId, dateString: todayStr });
 
     daily._prevSnapshot = {
       health:  { caloriesConsumed: daily.health.caloriesConsumed||0, proteinConsumed: daily.health.proteinConsumed||0, waterLiters: daily.health.waterLiters||0, sleepHours: daily.health.sleepHours||0, workouts: (daily.health.workouts||[]).map(w=>({type:w.type,durationMinutes:w.durationMinutes})) },
@@ -62,12 +65,35 @@ router.get('/health', authenticateToken, async (req, res) => {
     if (sleepHours     > (daily.health.sleepHours      || 0)) daily.health.sleepHours      = sleepHours;
     if (activeCalories > (daily.health.caloriesConsumed || 0)) daily.health.caloriesConsumed = activeCalories;
 
+    if (!daily.health.vitals) daily.health.vitals = {};
+    if (steps > (daily.health.vitals.steps || 0)) {
+      daily.health.vitals.steps = steps;
+      daily.markModified('health.vitals');
+    }
+
+    console.log(`[IntegrationRoutes] /health: saving DailyTracking dailyLog for userId=${userId}`);
+    daily._skipGoalSync = true;
     await daily.save();
+
+    console.log(`[IntegrationRoutes] /health: executing explicit GoalSyncEngine`);
+    const { default: GoalSyncEngine } = await import('../services/GoalSyncEngine.js');
+    goalsUpdated = await GoalSyncEngine.syncGoalsFromDailyLog(
+      userId,
+      daily,
+      daily._prevSnapshot || null
+    );
+
+    const { default: GamificationService } = await import('../services/GamificationService.js');
+    await GamificationService.evaluateRules(userId);
+
+    const { default: GamificationProfile } = await import('../models/GamificationProfile.js');
+    const profile = await GamificationProfile.findOne({ userId });
+    totalXP = profile ? profile.totalXP : 0;
   } catch (syncErr) {
     console.error('Integration health sync error:', syncErr.message);
   }
 
-  res.status(200).json({ success: true, data: mockHealthData });
+  res.status(200).json({ success: true, data: mockHealthData, totalXP, goalProgress: goalsUpdated, goalsUpdated });
 });
 
 // ── /finance — UNCHANGED ──────────────────────────────────────────────────────
@@ -126,7 +152,45 @@ router.get('/finance', authenticateToken, async (req, res) => {
       recentTransactions: logsThisMonth.flatMap(log => log.finance?.transactions || []).slice(0, 15)
     };
 
-    res.status(200).json({ success: true, data: dynamicFinanceData });
+    let goalsUpdated = [];
+    let totalXP = 0;
+    try {
+      const todayStr = todayKey();
+      let daily = await DailyTracking.findOne({ userId, dateString: todayStr });
+      if (!daily) daily = new DailyTracking({ userId, dateString: todayStr });
+
+      daily._prevSnapshot = {
+        health:  { caloriesConsumed: daily.health.caloriesConsumed||0, proteinConsumed: daily.health.proteinConsumed||0, waterLiters: daily.health.waterLiters||0, sleepHours: daily.health.sleepHours||0, workouts: (daily.health.workouts||[]).map(w=>({type:w.type,durationMinutes:w.durationMinutes})) },
+        finance: { moneySpent: daily.finance.moneySpent||0, moneyCredited: daily.finance.moneyCredited||0 },
+      };
+
+      const randomSpent = Math.round(50 + Math.random() * 150);
+      daily.finance.moneySpent = (daily.finance.moneySpent || 0) + randomSpent;
+      daily.finance.transactions.push({ amount: randomSpent, category: 'Food & Dining', type: 'expense', isImpulse: Math.random() > 0.7 });
+
+      console.log(`[IntegrationRoutes] /finance: saving DailyTracking dailyLog for userId=${userId}`);
+      daily._skipGoalSync = true;
+      await daily.save();
+
+      console.log(`[IntegrationRoutes] /finance: executing explicit GoalSyncEngine`);
+      const { default: GoalSyncEngine } = await import('../services/GoalSyncEngine.js');
+      goalsUpdated = await GoalSyncEngine.syncGoalsFromDailyLog(
+        userId,
+        daily,
+        daily._prevSnapshot || null
+      );
+
+      const { default: GamificationService } = await import('../services/GamificationService.js');
+      await GamificationService.evaluateRules(userId);
+
+      const { default: GamificationProfile } = await import('../models/GamificationProfile.js');
+      const profile = await GamificationProfile.findOne({ userId });
+      totalXP = profile ? profile.totalXP : 0;
+    } catch (syncErr) {
+      console.error('Integration finance sync error:', syncErr.message);
+    }
+
+    res.status(200).json({ success: true, data: dynamicFinanceData, totalXP, goalProgress: goalsUpdated, goalsUpdated });
   } catch (error) {
     console.error('Integration Finance Sync Error:', error);
     res.status(500).json({ success: false, message: 'Server Error synchronizing finance integration' });
@@ -136,18 +200,58 @@ router.get('/finance', authenticateToken, async (req, res) => {
 // ── /career — UNCHANGED ───────────────────────────────────────────────────────
 router.get('/career', authenticateToken, async (req, res) => {
   await simulateNetwork(1200);
-  res.status(200).json({
-    success: true,
-    data: {
-      source: 'GitHub & LinkedIn Connect', lastSync: new Date().toISOString(),
-      githubCommitsThisWeek:   Math.floor(Math.random() * (45 - 5) + 5),
-      topLanguages:            ['JavaScript', 'Python', 'C++'],
-      recentCertificates:      ['Advanced React Patterns', 'GenAI Prompt Engineering'],
-      linkedInProfileStrength: 'All-Star',
-      hoursInMeetingsToday:    (Math.random() * (6 - 1) + 1).toFixed(1),
-      learning: { courseraActiveCourse: 'Advanced Machine Learning', courseProgress: '65%' },
-    },
-  });
+  const commits = Math.floor(Math.random() * (45 - 5) + 5);
+  const mockCareerData = {
+    source: 'GitHub & LinkedIn Connect', lastSync: new Date().toISOString(),
+    githubCommitsThisWeek:   commits,
+    topLanguages:            ['JavaScript', 'Python', 'C++'],
+    recentCertificates:      ['Advanced React Patterns', 'GenAI Prompt Engineering'],
+    linkedInProfileStrength: 'All-Star',
+    hoursInMeetingsToday:    (Math.random() * (6 - 1) + 1).toFixed(1),
+    learning: { courseraActiveCourse: 'Advanced Machine Learning', courseProgress: '65%' },
+  };
+
+  let goalsUpdated = [];
+  let totalXP = 0;
+  try {
+    const userId = req.user.userId;
+    const todayStr = todayKey();
+    let daily = await DailyTracking.findOne({ userId, dateString: todayStr });
+    if (!daily) daily = new DailyTracking({ userId, dateString: todayStr });
+
+    daily._prevSnapshot = {
+      health:  { caloriesConsumed: daily.health.caloriesConsumed||0, proteinConsumed: daily.health.proteinConsumed||0, waterLiters: daily.health.waterLiters||0, sleepHours: daily.health.sleepHours||0, workouts: (daily.health.workouts||[]).map(w=>({type:w.type,durationMinutes:w.durationMinutes})) },
+      finance: { moneySpent: daily.finance.moneySpent||0, moneyCredited: daily.finance.moneyCredited||0 },
+      career:  { studyHours: daily.career.studyHours||0, completedCourses: daily.career.completedCourses||0, githubCommits: daily.career.githubCommits||0, projectsCompleted: daily.career.projectsCompleted||0 }
+    };
+
+    if (commits > (daily.career.githubCommits || 0)) {
+      daily.career.githubCommits = commits;
+    }
+
+    console.log(`[IntegrationRoutes] /career: saving DailyTracking dailyLog for userId=${userId}`);
+    daily._skipGoalSync = true;
+    await daily.save();
+
+    console.log(`[IntegrationRoutes] /career: executing explicit GoalSyncEngine`);
+    const { default: GoalSyncEngine } = await import('../services/GoalSyncEngine.js');
+    goalsUpdated = await GoalSyncEngine.syncGoalsFromDailyLog(
+      userId,
+      daily,
+      daily._prevSnapshot || null
+    );
+
+    const { default: GamificationService } = await import('../services/GamificationService.js');
+    await GamificationService.evaluateRules(userId);
+
+    const { default: GamificationProfile } = await import('../models/GamificationProfile.js');
+    const profile = await GamificationProfile.findOne({ userId });
+    totalXP = profile ? profile.totalXP : 0;
+  } catch (syncErr) {
+    console.error('Integration career sync error:', syncErr.message);
+  }
+
+  res.status(200).json({ success: true, data: mockCareerData, totalXP, goalProgress: goalsUpdated, goalsUpdated });
 });
 
 // ── Status / connect / disconnect — UNCHANGED ─────────────────────────────────

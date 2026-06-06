@@ -623,23 +623,31 @@ export default function Goals() {
   }, []);
 
   useEffect(() => {
+    console.log("[GoalsPage] Mounted and registering event listeners including 'dashboard-data-updated'.");
     fetchGoals();
     fetchSyncStatus();
     
     const handleSync = () => {
+      console.log("[GoalsPage] Received 'dashboard-data-updated' or sync event! Re-fetching goals and sync status.");
       fetchGoals();
       fetchSyncStatus();
     };
     window.addEventListener('dashboard-synced', handleSync);
     window.addEventListener('daily-update-completed', handleSync);
     window.addEventListener('upload-history-updated', handleSync);
+    window.addEventListener('dashboard-data-updated', handleSync);
 
-    const interval = setInterval(() => fetchSyncStatus(), 60000);
+    const interval = setInterval(() => {
+      console.log("[GoalsPage] Running 60s sync status poll...");
+      fetchSyncStatus();
+    }, 60000);
     return () => {
+      console.log("[GoalsPage] Unmounting. Cleaning up listeners and interval.");
       clearInterval(interval);
       window.removeEventListener('dashboard-synced', handleSync);
       window.removeEventListener('daily-update-completed', handleSync);
       window.removeEventListener('upload-history-updated', handleSync);
+      window.removeEventListener('dashboard-data-updated', handleSync);
     };
   }, [fetchGoals, fetchSyncStatus]);
 

@@ -1,5 +1,6 @@
-import GamificationEngine from '../services/GamificationEngine.js';
-import { getLatestOnboardingProfile } from '../services/domainDataService.js';
+import GamificationProfile from '../models/GamificationProfile.js';
+import { getLatestOnboardingProfile, todayKey } from '../services/domainDataService.js';
+import DailyTracking from '../models/DailyTracking.js';
 
 export const getCareer = async (req, res) => {
   const onboarding = await getLatestOnboardingProfile(req.user.userId);
@@ -66,17 +67,41 @@ export const logCourse = async (req, res) => {
     // ✅ FIXED: Using .userId
     const userId = req.user.userId; 
     const { courseName } = req.body;
+    const today = todayKey();
 
-    const gamificationResult = await GamificationEngine.logEvent(
-      userId, 
-      'COURSE_DONE', 
-      { courseName }
+    let daily = await DailyTracking.findOne({ userId, dateString: today });
+    if (!daily) daily = new DailyTracking({ userId, dateString: today });
+
+    daily._prevSnapshot = {
+      health:  { caloriesConsumed: daily.health.caloriesConsumed||0, proteinConsumed: daily.health.proteinConsumed||0, waterLiters: daily.health.waterLiters||0, sleepHours: daily.health.sleepHours||0, workouts: [] },
+      finance: { moneySpent: daily.finance.moneySpent||0, moneyCredited: daily.finance.moneyCredited||0 },
+      career:  { studyHours: daily.career.studyHours||0, completedCourses: daily.career.completedCourses||0, githubCommits: daily.career.githubCommits||0, projectsCompleted: daily.career.projectsCompleted||0 }
+    };
+
+    daily.career.completedCourses = (daily.career.completedCourses || 0) + 1;
+
+    daily._skipGoalSync = true;
+    await daily.save();
+
+    const { default: GoalSyncEngine } = await import('../services/GoalSyncEngine.js');
+    const goalsUpdated = await GoalSyncEngine.syncGoalsFromDailyLog(
+      userId,
+      daily,
+      daily._prevSnapshot || null
     );
 
+    console.log(`[CareerController] logCourse: calling GamificationService.evaluateRules`);
+    const { default: GamificationService } = await import('../services/GamificationService.js');
+    const gamificationResult = await GamificationService.evaluateRules(userId);
+
+    const profile = await GamificationProfile.findOne({ userId });
+    const totalXP = profile ? profile.totalXP : 0;
     res.status(201).json({
       success: true,
       message: 'Course completion logged!',
-      gamification: gamificationResult 
+      gamification: gamificationResult,
+      totalXP,
+      goalProgress: goalsUpdated
     });
   } catch (error) {
     console.error('Career Controller Error:', error);
@@ -91,17 +116,43 @@ export const logFocusSession = async (req, res) => {
     // ✅ FIXED: Using .userId
     const userId = req.user.userId; 
     const { durationMinutes } = req.body;
+    const today = todayKey();
 
-    const gamificationResult = await GamificationEngine.logEvent(
-      userId, 
-      'FOCUS_SESSION_COMPLETED', 
-      { durationMinutes }
+    let daily = await DailyTracking.findOne({ userId, dateString: today });
+    if (!daily) daily = new DailyTracking({ userId, dateString: today });
+
+    daily._prevSnapshot = {
+      health:  { caloriesConsumed: daily.health.caloriesConsumed||0, proteinConsumed: daily.health.proteinConsumed||0, waterLiters: daily.health.waterLiters||0, sleepHours: daily.health.sleepHours||0, workouts: [] },
+      finance: { moneySpent: daily.finance.moneySpent||0, moneyCredited: daily.finance.moneyCredited||0 },
+      career:  { studyHours: daily.career.studyHours||0, completedCourses: daily.career.completedCourses||0, githubCommits: daily.career.githubCommits||0, projectsCompleted: daily.career.projectsCompleted||0 }
+    };
+
+    // Convert minutes to hours for studyHours daily log representation
+    const hrs = Number(durationMinutes) / 60;
+    daily.career.studyHours = (daily.career.studyHours || 0) + hrs;
+
+    daily._skipGoalSync = true;
+    await daily.save();
+
+    const { default: GoalSyncEngine } = await import('../services/GoalSyncEngine.js');
+    const goalsUpdated = await GoalSyncEngine.syncGoalsFromDailyLog(
+      userId,
+      daily,
+      daily._prevSnapshot || null
     );
 
+    console.log(`[CareerController] logFocusSession: calling GamificationService.evaluateRules`);
+    const { default: GamificationService } = await import('../services/GamificationService.js');
+    const gamificationResult = await GamificationService.evaluateRules(userId);
+
+    const profile = await GamificationProfile.findOne({ userId });
+    const totalXP = profile ? profile.totalXP : 0;
     res.status(201).json({
       success: true,
       message: 'Focus session logged!',
-      gamification: gamificationResult 
+      gamification: gamificationResult,
+      totalXP,
+      goalProgress: goalsUpdated
     });
   } catch (error) {
     console.error('Career Controller Error:', error);

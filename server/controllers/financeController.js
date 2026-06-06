@@ -68,6 +68,36 @@ export const getFinanceTrajectory = async (req, res) => {
   res.status(200).json({ success: true, data: buildTrajectory(logs) });
 };
 
+const generateMarketAnalysisWithTiers = async (genAI, systemPrompt, retries = 2) => {
+  try {
+    // Tier 1: Try with googleSearch grounding
+    const modelWithSearch = genAI.getGenerativeModel({ 
+      model: 'gemini-2.5-flash',
+      tools: [{ googleSearch: {} }]
+    });
+    const result = await modelWithSearch.generateContent(systemPrompt);
+    return result.response.text();
+  } catch (err) {
+    console.warn(`⚠️ [MarketAnalysis] Tier 1 Google Search Grounding failed (${err.message}). Trying Tier 2 (Standard Gemini)...`);
+    
+    try {
+      // Tier 2: Try standard model (no search grounding, much higher success rate)
+      const modelStandard = genAI.getGenerativeModel({ 
+        model: 'gemini-2.5-flash' 
+      });
+      const result = await modelStandard.generateContent(systemPrompt);
+      return result.response.text();
+    } catch (err2) {
+      if (retries > 0 && (err2.status === 503 || err2.status === 429)) {
+        console.warn(`⚠️ [MarketAnalysis] Gemini busy. Retrying standard call in 2 seconds... (${retries} attempts left)`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return generateMarketAnalysisWithTiers(genAI, systemPrompt, retries - 1);
+      }
+      throw err2;
+    }
+  }
+};
+
 export const getMarketAnalysis = async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -85,10 +115,6 @@ export const getMarketAnalysis = async (req, res) => {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.5-flash',
-      tools: [{ googleSearch: {} }]
-    });
 
     const systemPrompt = `
       You are the LifeTwin Autonomous Macro Financial Analyst.
@@ -130,8 +156,7 @@ export const getMarketAnalysis = async (req, res) => {
       }
     `;
 
-    const result = await model.generateContent(systemPrompt);
-    const text = result.response.text();
+    const text = await generateMarketAnalysisWithTiers(genAI, systemPrompt);
     const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(cleaned);
 
@@ -192,7 +217,7 @@ export const logExpense = async (req, res) => {
     const gamificationResult = await GamificationEngine.logEvent(
       userId, 
       'EXPENSE_LOGGED', 
-      { amount, description }
+      { amount, description, addedValue: Number(amount) || 1 }
     );
 
     res.status(201).json({

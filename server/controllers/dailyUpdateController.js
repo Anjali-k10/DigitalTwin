@@ -70,6 +70,28 @@ async function applyDailyUpdateEffects(userId, date, payload) {
     getOrCreateDailyLog(userId, date),
     OnboardingProfile.findOne({ userId }).sort({ updatedAt: -1 }),
   ]);
+
+  // Snapshot BEFORE mutation
+  dailyLog._prevSnapshot = {
+    health: {
+      caloriesConsumed: dailyLog.health.caloriesConsumed || 0,
+      proteinConsumed: dailyLog.health.proteinConsumed || 0,
+      waterLiters: dailyLog.health.waterLiters || 0,
+      sleepHours: dailyLog.health.sleepHours || 0,
+      workouts: (dailyLog.health.workouts || []).map(w => ({ type: w.type, durationMinutes: w.durationMinutes }))
+    },
+    finance: {
+      moneySpent: dailyLog.finance.moneySpent || 0,
+      moneyCredited: dailyLog.finance.moneyCredited || 0
+    },
+    career: {
+      studyHours: dailyLog.career.studyHours || 0,
+      completedCourses: dailyLog.career.completedCourses || 0,
+      githubCommits: dailyLog.career.githubCommits || 0,
+      projectsCompleted: dailyLog.career.projectsCompleted || 0
+    }
+  };
+
   const previousScores = profile ? {
     healthScore: deriveHealthScore(profile),
     financeScore: Number(profile.financialHealth || 0),
@@ -134,18 +156,54 @@ async function applyDailyUpdateEffects(userId, date, payload) {
     }
   }
 
+  console.log(`[DailyUpdateController] applyDailyUpdateEffects: saving DailyTracking dailyLog for userId=${userId}`);
   dailyLog.finance.holdings = mergedHoldings;
+  dailyLog._skipGoalSync = true;
   await dailyLog.save();
 
+  console.log(`[DailyUpdateController] applyDailyUpdateEffects: executing explicit GoalSyncEngine`);
+  const { default: GoalSyncEngine } = await import('../services/GoalSyncEngine.js');
+  const syncResult = await GoalSyncEngine.syncGoalsFromDailyLog(
+    userId,
+    dailyLog,
+    dailyLog._prevSnapshot || null
+  );
+
   let goal = null;
+  const goalsUpdated = [...(syncResult || [])];
+
   if (payload.goal.goalId) {
     goal = await SmartGoal.findOne({ _id: payload.goal.goalId, userId });
     if (goal && payload.goal.goalCompleted) {
+      const before = goal.currentMetric;
       goal.currentMetric = Math.min(Number(goal.currentMetric || 0) + 1, Number(goal.targetMetric || 1));
       goal.lastLoggedAt = new Date();
       goal.streak = Number(goal.streak || 0) + 1;
       goal.progressLogs.push({ value: 1, note: 'Daily Twin Check-In', loggedAt: new Date() });
       await goal.save();
+
+      const added = goal.currentMetric - before;
+      
+      console.log(`[DailyUpdateController] applyDailyUpdateEffects: logging manual check-in goal event`);
+      // Let's log gamification event for manual goal completed if it wasn't already in syncResult
+      const { default: GamificationEngine } = await import('../services/GamificationEngine.js');
+      const eventName = goal.status === 'completed' ? 'GOAL_COMPLETED' : 'GOAL_PROGRESS_LOGGED';
+      const gamificationResult = await GamificationEngine.logEvent(userId, eventName, {
+        goalId: goal._id,
+        addedValue: added || 1
+      });
+
+      goalsUpdated.push({
+        goalId: goal._id,
+        title: goal.title,
+        domain: goal.domain,
+        added: added || 1,
+        current: goal.currentMetric,
+        target: goal.targetMetric,
+        unit: goal.unit,
+        completed: goal.status === 'completed',
+        xpEarned: gamificationResult ? gamificationResult.xpAwarded : 0
+      });
     }
   }
 
@@ -169,8 +227,18 @@ async function applyDailyUpdateEffects(userId, date, payload) {
     careerScore: Number(profile.productivityScore || 0),
   } : {};
 
+  const { default: GamificationService } = await import('../services/GamificationService.js');
+  await GamificationService.evaluateRules(userId);
+
+  const { default: GamificationProfile } = await import('../models/GamificationProfile.js');
+  const gamificationProfile = await GamificationProfile.findOne({ userId });
+  const totalXP = gamificationProfile ? gamificationProfile.totalXP : 0;
+
   return {
     goalUpdated: Boolean(goal && payload.goal.goalCompleted),
+    goalsUpdated,
+    totalXP,
+    goalProgress: goalsUpdated,
     previousScores,
     nextScores,
     scoreDrops: {

@@ -105,6 +105,7 @@ function NoDataCell({ label, icon: Icon, onConnect }) {
 export default function Health() {
   const dispatch = useDispatch();
   const healthIntegration = useSelector((state) => state.healthIntegration);
+  const hasWearableFetchedRef = useRef(false);
   const [mounted, setMounted]               = useState(false);
   const [syncStatus, setSyncStatus]         = useState('idle'); // idle|syncing|connected|error
   const [syncError, setSyncError]           = useState('');
@@ -179,7 +180,8 @@ export default function Health() {
       setSyncStatus('connected');
       if (Object.keys(healthIntegration.deviceData || {}).length > 0) {
         setWearable(healthIntegration.deviceData);
-      } else {
+      } else if (!hasWearableFetchedRef.current) {
+        hasWearableFetchedRef.current = true;
         fetchWearable();
       }
       localStorage.setItem(LS_DISMISSED, 'true');
@@ -220,6 +222,8 @@ export default function Health() {
         m.sleepHours = parseFloat(m.sleepHours);
         setWearable(m);
         setSyncStatus('connected');
+        window.dispatchEvent(new Event('dashboard-data-updated'));
+        window.dispatchEvent(new Event('gamification-updated'));
         const sleepGoal = dashProfile?.profile?.sleepHours || 7;
         if (m.steps >= 10000)                                triggerReward(50, 'Daily Step Goal Hit', '👟');
         if (m.sleepHours >= sleepGoal)                       triggerReward(40, 'Sleep Goal Achieved', '💤');
@@ -377,6 +381,13 @@ export default function Health() {
     setPeriodSetup({ lastPeriod:'', condition:'none' });
     setPregWeeks(''); setPregDue('');
     setSetupStep(0); setPhase(null); setWomenMode('period_setup');
+  }
+  function handleRestartPeriod(newDate) {
+    const updatedSetup = { ...periodSetup, lastPeriod: newDate };
+    setPeriodSetup(updatedSetup);
+    localStorage.setItem('ltWomenHealth', JSON.stringify(updatedSetup));
+    setPhase(computePhase(newDate, periodSetup.condition));
+    triggerReward(100, 'Period Cycle Restarted 🌸', '🧬');
   }
 
   // ── Smoking tracker helpers ─────────────────────────────────────────────────
@@ -821,7 +832,7 @@ export default function Health() {
             </button>
             <div className={`relative z-10 flex flex-col h-full transition-all duration-500 ${blurred ? 'blur-md opacity-30 select-none pointer-events-none' : ''}`}>
               {womenMode === 'period_setup'   && <PeriodSetup step={setupStep} setStep={setSetupStep} setup={periodSetup} setSetup={setPeriodSetup} onComplete={savePeriod} />}
-              {womenMode === 'period'         && phase && <PeriodTracker phase={phase} setup={periodSetup} symptoms={symptoms} toggleSym={s => setSymptoms(p => p.includes(s) ? p.filter(x=>x!==s) : [...p,s])} onMissed={() => setWomenMode('troubleshoot')} onPreg={() => setWomenMode('preg_setup')} onReset={resetWomen} wearable={wearableReady ? wearable : null} />}
+              {womenMode === 'period'         && phase && <PeriodTracker phase={phase} setup={periodSetup} symptoms={symptoms} toggleSym={s => setSymptoms(p => p.includes(s) ? p.filter(x=>x!==s) : [...p,s])} onMissed={() => setWomenMode('troubleshoot')} onPreg={() => setWomenMode('preg_setup')} onReset={resetWomen} wearable={wearableReady ? wearable : null} onRestartCycle={handleRestartPeriod} />}
               {womenMode === 'troubleshoot'   && <TroubleshootPanel condition={periodSetup.condition} wearable={wearableReady ? wearable : null} onBack={() => setWomenMode('period')} onConfirm={() => setWomenMode('preg_setup')} />}
               {womenMode === 'preg_setup'     && <PregSetup weeks={pregWeeks} setWeeks={setPregWeeks} due={pregDue} setDue={setPregDue} onSave={savePreg} onBack={() => setWomenMode('period')} />}
               {womenMode === 'preg_dashboard' && <PregDashboard weeks={parseInt(pregWeeks)||6} due={pregDue} weather={weather} onReset={resetWomen} onBack={() => setWomenMode('period')} />}
@@ -1189,8 +1200,17 @@ function PeriodSetup({ step, setStep, setup, setSetup, onComplete }) {
             <SmallFlower className="absolute -bottom-1 -left-1 h-6 w-6 text-[#ff6b9d]" />
           </div>
           <h4 className="text-lg font-bold text-white mb-2">Set up your Bloom Companion</h4>
-          <p className="text-sm text-white/45 leading-relaxed max-w-xs mb-6">Two quick questions so your Digital Twin can give you phase-aware guidance that actually fits your body.</p>
-          <button onClick={() => setStep(1)} className="w-full max-w-xs bg-gradient-to-r from-[#ff6b9d] to-[#c084fc] text-white font-bold py-3 rounded-xl hover:opacity-90 transition-all hover:shadow-[0_0_20px_rgba(255,107,157,0.35)]">
+          <p className="text-sm text-white/45 leading-relaxed max-w-xs mb-4">Select the start date of your last period to enable phase-aware guidance that fits your body.</p>
+          
+          <div className="w-full max-w-xs mb-6 text-left">
+            <label className="block text-[10px] font-bold text-[#ff6b9d] mb-2 uppercase tracking-widest text-center">Last Period Start Date</label>
+            <input type="date" max={new Date().toISOString().split('T')[0]}
+              className="w-full bg-black/40 border border-[#ff6b9d]/20 rounded-xl p-3.5 text-white text-sm focus:border-[#ff6b9d]/50 focus:outline-none transition-all text-center"
+              value={setup.lastPeriod} onChange={e => setSetup(p => ({...p, lastPeriod:e.target.value}))} />
+          </div>
+
+          <button onClick={() => setStep(2)} disabled={!setup.lastPeriod}
+            className="w-full max-w-xs bg-gradient-to-r from-[#ff6b9d] to-[#c084fc] text-white font-bold py-3 rounded-xl hover:opacity-90 disabled:opacity-30 transition-all hover:shadow-[0_0_20px_rgba(255,107,157,0.35)]">
             Let's begin 🌷
           </button>
         </div>
@@ -1230,7 +1250,7 @@ function PeriodSetup({ step, setStep, setup, setSetup, onComplete }) {
             ))}
           </div>
           <div className="flex gap-3 mt-auto pt-6">
-            <button onClick={() => setStep(1)} className="flex items-center gap-1 text-sm text-white/30 hover:text-white transition-all"><ChevronLeft className="h-4 w-4" /> Back</button>
+            <button onClick={() => setStep(0)} className="flex items-center gap-1 text-sm text-white/30 hover:text-white transition-all"><ChevronLeft className="h-4 w-4" /> Back</button>
             <button onClick={onComplete}
               className="ml-auto bg-gradient-to-r from-[#ff6b9d] to-[#c084fc] text-white font-bold px-6 py-2.5 rounded-xl hover:opacity-90 transition-all hover:shadow-[0_0_20px_rgba(255,107,157,0.3)]">
               Activate Bloom 🌷
@@ -1242,8 +1262,9 @@ function PeriodSetup({ step, setStep, setup, setSetup, onComplete }) {
   );
 }
 
-function PeriodTracker({ phase, setup, symptoms, toggleSym, onMissed, onPreg, onReset, wearable }) {
+function PeriodTracker({ phase, setup, symptoms, toggleSym, onMissed, onPreg, onReset, wearable, onRestartCycle }) {
   const pct = Math.round((phase.day / phase.cycleLen) * 100);
+  const [restartDate, setRestartDate] = useState(new Date().toISOString().split('T')[0]);
   return (
     <div className="flex flex-col h-full gap-4">
       <div className="flex items-center justify-between">
@@ -1305,6 +1326,27 @@ function PeriodTracker({ phase, setup, symptoms, toggleSym, onMissed, onPreg, on
           ))}
           {setup.condition === 'pcod' && <div className="flex items-start gap-2.5 mt-2 pt-2 border-t border-white/8"><div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#ffd166]" /><p className="text-xs text-[#ffd166]/70 leading-relaxed">PCOD: Avoid sugar spikes — low-GI carbs manage insulin & androgen levels.</p></div>}
           {setup.condition === 'endo' && <div className="flex items-start gap-2.5 mt-2 pt-2 border-t border-white/8"><div className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#f87171]" /><p className="text-xs text-[#f87171]/70 leading-relaxed">Endo: Anti-inflammatory foods (turmeric, omega-3s, ginger) reduce prostaglandin pain.</p></div>}
+        </div>
+      </div>
+      <div className="rounded-xl border border-[#ff6b9d]/20 bg-[#ff6b9d]/5 p-4 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold text-white/80">Got your period today?</p>
+          <span className="text-[10px] text-white/30 font-semibold">Restart Cycle</span>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="date"
+            max={new Date().toISOString().split('T')[0]}
+            value={restartDate}
+            onChange={(e) => setRestartDate(e.target.value)}
+            className="flex-1 bg-black/40 border border-[#ff6b9d]/25 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#ff6b9d]/50"
+          />
+          <button
+            onClick={() => onRestartCycle(restartDate)}
+            className="bg-gradient-to-r from-[#ff6b9d] to-[#c084fc] text-white font-bold text-xs px-3.5 py-1.5 rounded-lg hover:opacity-90 transition-all hover:shadow-[0_0_15px_rgba(255,107,157,0.25)]"
+          >
+            Restart
+          </button>
         </div>
       </div>
       <div className="flex gap-2.5">

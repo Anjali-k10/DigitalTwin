@@ -1,4 +1,4 @@
-import GamificationEngine from '../services/GamificationEngine.js';
+import GamificationProfile from '../models/GamificationProfile.js';
 import DailyTracking from '../models/DailyTracking.js';
 import {
   buildTrajectory,
@@ -118,13 +118,25 @@ export const logWorkout = async (req, res) => {
     // 3. Append workout entry
     daily.health.workouts.push({ type: type || 'General', durationMinutes: Number(duration) || 0 });
 
-    // 4. Save — post-save hook fires GoalSyncEngine automatically
+    console.log(`[HealthController] logWorkout: saving daily tracking document for userId=${userId}`);
+    daily._skipGoalSync = true;
     await daily.save();
 
-    // 5. Gamification
-    const gamification = await GamificationEngine.logEvent(userId, 'WORKOUT_LOGGED', { type, duration });
+    console.log(`[HealthController] logWorkout: executing explicit GoalSyncEngine.syncGoalsFromDailyLog`);
+    const { default: GoalSyncEngine } = await import('../services/GoalSyncEngine.js');
+    const goalsUpdated = await GoalSyncEngine.syncGoalsFromDailyLog(
+      userId,
+      daily,
+      daily._prevSnapshot || null
+    );
 
-    res.status(201).json({ success: true, message: 'Workout logged!', gamification });
+    console.log(`[HealthController] logWorkout: calling GamificationService.evaluateRules`);
+    const { default: GamificationService } = await import('../services/GamificationService.js');
+    const gamificationResult = await GamificationService.evaluateRules(userId);
+
+    const profile = await GamificationProfile.findOne({ userId });
+    const totalXP = profile ? profile.totalXP : 0;
+    res.status(201).json({ success: true, message: 'Workout logged!', gamification: gamificationResult, totalXP, goalProgress: goalsUpdated });
   } catch (error) {
     console.error('logWorkout Error:', error);
     res.status(500).json({ success: false, message: 'Server Error' });
@@ -153,13 +165,25 @@ export const logSleep = async (req, res) => {
     // 3. Set sleep hours (replace, not increment — you only sleep once per day)
     daily.health.sleepHours = Number(hours) || 0;
 
-    // 4. Save — post-save hook fires GoalSyncEngine automatically
+    console.log(`[HealthController] logSleep: saving daily tracking document for userId=${userId}`);
+    daily._skipGoalSync = true;
     await daily.save();
 
-    // 5. Gamification
-    const gamification = await GamificationEngine.logEvent(userId, 'SLEEP_LOGGED', { hours });
+    console.log(`[HealthController] logSleep: executing explicit GoalSyncEngine.syncGoalsFromDailyLog`);
+    const { default: GoalSyncEngine } = await import('../services/GoalSyncEngine.js');
+    const goalsUpdated = await GoalSyncEngine.syncGoalsFromDailyLog(
+      userId,
+      daily,
+      daily._prevSnapshot || null
+    );
 
-    res.status(201).json({ success: true, message: 'Sleep logged!', gamification });
+    console.log(`[HealthController] logSleep: calling GamificationService.evaluateRules`);
+    const { default: GamificationService } = await import('../services/GamificationService.js');
+    const gamificationResult = await GamificationService.evaluateRules(userId);
+
+    const profile = await GamificationProfile.findOne({ userId });
+    const totalXP = profile ? profile.totalXP : 0;
+    res.status(201).json({ success: true, message: 'Sleep logged!', gamification: gamificationResult, totalXP, goalProgress: goalsUpdated });
   } catch (error) {
     console.error('logSleep Error:', error);
     res.status(500).json({ success: false, message: 'Server Error' });
