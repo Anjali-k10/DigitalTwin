@@ -1,5 +1,6 @@
 import GamificationEngine from '../services/GamificationEngine.js';
 import DailyTracking from '../models/DailyTracking.js';
+import Upload from '../models/Upload.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   buildTrajectory,
@@ -68,6 +69,73 @@ export const getFinanceTrajectory = async (req, res) => {
   res.status(200).json({ success: true, data: buildTrajectory(logs) });
 };
 
+export const getDocumentFinanceIntelligence = async (req, res) => {
+  const userId = req.user.userId;
+  const uploads = await Upload.find({ userId, domain: 'finance' }).sort({ createdAt: 1 }).limit(50).lean();
+
+  if (uploads.length === 0) {
+    return res.status(200).json({
+      success: true,
+      data: {
+        status: 'empty',
+        documentCount: 0,
+        records: [],
+        categoryAnalysis: [],
+        spikes: [],
+        insights: [],
+        message: 'No financial history available yet.',
+        detail: 'Upload bills, receipts, or financial documents to detect unusual spending patterns.',
+      },
+    });
+  }
+
+  const records = uploads.flatMap((upload) => extractFinanceRecords(upload));
+
+  if (uploads.length === 1) {
+    return res.status(200).json({
+      success: true,
+      data: {
+        status: 'insufficient',
+        documentCount: uploads.length,
+        records,
+        categoryAnalysis: [],
+        spikes: [],
+        insights: [],
+        message: 'More spending history is needed before unusual spending can be detected.',
+        detail: 'Need at least 2-3 finance records for comparison.',
+      },
+    });
+  }
+
+  const latestUpload = uploads[uploads.length - 1];
+  const previousUploads = uploads.slice(0, -1);
+  const latestRecords = extractFinanceRecords(latestUpload).filter((record) => record.type !== 'income');
+  const previousRecordGroups = previousUploads.map((upload) => extractFinanceRecords(upload).filter((record) => record.type !== 'income'));
+  const categoryAnalysis = buildCategoryAnalysis(latestRecords, previousRecordGroups);
+  const savings = buildSavingsSignal(uploads);
+  const investments = buildInvestmentSignal(uploads);
+  const insights = await buildFinanceInsightsWithGemini({
+    categoryAnalysis,
+    savings,
+    investments,
+    documentCount: uploads.length,
+  });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      status: 'ready',
+      documentCount: uploads.length,
+      records,
+      categoryAnalysis,
+      spikes: categoryAnalysis.filter((item) => item.severity !== 'Normal'),
+      insights,
+      savings,
+      investments,
+    },
+  });
+};
+
 const generateMarketAnalysisWithTiers = async (genAI, systemPrompt, retries = 2) => {
   try {
     // Tier 1: Try with googleSearch grounding
@@ -97,6 +165,215 @@ const generateMarketAnalysisWithTiers = async (genAI, systemPrompt, retries = 2)
     }
   }
 };
+
+function extractFinanceRecords(upload) {
+  const finance = upload.extractedData?.financeData || {};
+  const transactions = Array.isArray(finance.transactions) ? finance.transactions : [];
+  const records = transactions
+    .map((transaction) => ({
+      documentId: String(upload._id),
+      fileName: upload.fileName,
+      date: normalizeRecordDate(transaction.date || upload.createdAt),
+      category: normalizeFinanceCategory(transaction.category),
+      amount: positiveNumber(transaction.amount),
+      type: transaction.type === 'income' ? 'income' : 'expense',
+    }))
+    .filter((record) => record.amount > 0);
+
+  if (!records.length && positiveNumber(finance.moneySpent) > 0) {
+    records.push({
+      documentId: String(upload._id),
+      fileName: upload.fileName,
+      date: normalizeRecordDate(upload.createdAt),
+      category: inferCategoryFromFileName(upload.fileName),
+      amount: positiveNumber(finance.moneySpent),
+      type: 'expense',
+    });
+  }
+
+  if (positiveNumber(finance.moneyCredited) > 0) {
+    records.push({
+      documentId: String(upload._id),
+      fileName: upload.fileName,
+      date: normalizeRecordDate(upload.createdAt),
+      category: 'Income',
+      amount: positiveNumber(finance.moneyCredited),
+      type: 'income',
+    });
+  }
+
+  return records;
+}
+
+function buildCategoryAnalysis(latestRecords, previousRecordGroups) {
+  const latestByCategory = sumRecordsByCategory(latestRecords);
+  return Object.entries(latestByCategory)
+    .map(([category, current]) => {
+      const historicalTotals = previousRecordGroups
+        .map((group) => sumRecordsByCategory(group)[category] || 0)
+        .filter((amount) => amount > 0);
+      if (!historicalTotals.length) return null;
+
+      const average = historicalTotals.reduce((sum, amount) => sum + amount, 0) / historicalTotals.length;
+      const difference = current - average;
+      const changePct = average > 0 ? Math.round((difference / average) * 100) : 0;
+      const severity = getSpikeSeverity(changePct);
+
+      return {
+        category,
+        average: Math.round(average),
+        current: Math.round(current),
+        difference: Math.round(difference),
+        changePct,
+        severity,
+        title: severity === 'Unusual Spending Spike'
+          ? `Unusual ${category} Spending Detected`
+          : `${category} Spending ${severity}`,
+        description: buildSpikeDescription(category, difference, severity),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.changePct - a.changePct);
+}
+
+function sumRecordsByCategory(records) {
+  return records.reduce((totals, record) => {
+    totals[record.category] = (totals[record.category] || 0) + record.amount;
+    return totals;
+  }, {});
+}
+
+function getSpikeSeverity(changePct) {
+  if (changePct < 20) return 'Normal';
+  if (changePct <= 50) return 'Moderate Increase';
+  if (changePct <= 100) return 'High Increase';
+  return 'Unusual Spending Spike';
+}
+
+function buildSpikeDescription(category, difference, severity) {
+  if (severity === 'Normal') {
+    return `${category} spending is within your recent spending pattern.`;
+  }
+  const absDifference = Math.max(0, Math.round(difference));
+  return `${category} expenses increased by Rs ${absDifference.toLocaleString('en-IN')} compared to your normal spending pattern.`;
+}
+
+function buildSavingsSignal(uploads) {
+  const perDocument = uploads.map((upload) => {
+    const records = extractFinanceRecords(upload);
+    const income = records.filter((record) => record.type === 'income').reduce((sum, record) => sum + record.amount, 0);
+    const expenses = records.filter((record) => record.type !== 'income').reduce((sum, record) => sum + record.amount, 0);
+    return { date: normalizeRecordDate(upload.createdAt), savings: Math.round(income - expenses), income: Math.round(income), expenses: Math.round(expenses) };
+  });
+  const current = perDocument.at(-1)?.savings || 0;
+  const previous = perDocument.length > 1 ? perDocument.slice(0, -1).reduce((sum, item) => sum + item.savings, 0) / (perDocument.length - 1) : 0;
+  return { current, previousAverage: Math.round(previous), difference: Math.round(current - previous), perDocument };
+}
+
+function buildInvestmentSignal(uploads) {
+  const perDocument = uploads.map((upload) => {
+    const finance = upload.extractedData?.financeData || {};
+    const holdingsValue = Array.isArray(finance.holdings)
+      ? finance.holdings.reduce((sum, holding) => sum + positiveNumber(holding.value), 0)
+      : 0;
+    return {
+      date: normalizeRecordDate(upload.createdAt),
+      value: Math.round(positiveNumber(finance.portfolioValue) || holdingsValue),
+    };
+  });
+  const current = perDocument.at(-1)?.value || 0;
+  const previous = perDocument.length > 1 ? perDocument.slice(0, -1).reduce((sum, item) => sum + item.value, 0) / (perDocument.length - 1) : 0;
+  return { current, previousAverage: Math.round(previous), difference: Math.round(current - previous), perDocument };
+}
+
+async function buildFinanceInsightsWithGemini(signals) {
+  const fallback = buildGroundedFinanceInsights(signals);
+  if (!process.env.GEMINI_API_KEY) return fallback;
+
+  try {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const prompt = `
+You are LifeTwin Finance Cross Intelligence.
+Generate 3-5 concise actionable insights from ONLY the finance data below.
+Every insight must reference an actual category, percentage, rupee amount, savings value, or investment value from the data.
+Do not invent categories. Do not give generic advice. Return ONLY raw JSON:
+{ "insights": ["short insight", "short insight"] }
+
+Finance signals:
+${JSON.stringify({
+  spendingCategories: signals.categoryAnalysis.map(({ category, average, current, difference, changePct, severity }) => ({ category, historicalAverage: average, currentExpense: current, difference, changePct, severity })),
+  savings: signals.savings,
+  investments: signals.investments,
+  documentCount: signals.documentCount,
+})}
+`;
+    const result = await model.generateContent(prompt);
+    const cleaned = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    const insights = Array.isArray(parsed.insights) ? parsed.insights.map((item) => String(item).trim()).filter(Boolean).slice(0, 5) : [];
+    return insights.length ? insights : fallback;
+  } catch (error) {
+    console.warn('[FinanceIntelligence] Gemini insight generation failed:', error.message);
+    return fallback;
+  }
+}
+
+function buildGroundedFinanceInsights(signals) {
+  const insights = [];
+  signals.categoryAnalysis
+    .filter((item) => item.severity !== 'Normal')
+    .slice(0, 3)
+    .forEach((item) => {
+      insights.push(`${item.category} expenses increased by ${item.changePct}% compared to your recent average of Rs ${item.average.toLocaleString('en-IN')}.`);
+    });
+
+  if (signals.savings.difference > 0) {
+    insights.push(`Savings improved by Rs ${signals.savings.difference.toLocaleString('en-IN')} over the previous period.`);
+  } else if (signals.savings.difference < 0) {
+    insights.push(`Savings declined by Rs ${Math.abs(signals.savings.difference).toLocaleString('en-IN')} compared to previous records.`);
+  }
+
+  if (signals.investments.difference > 0) {
+    insights.push(`Investment activity increased by Rs ${signals.investments.difference.toLocaleString('en-IN')}.`);
+  } else if (signals.investments.current > 0) {
+    insights.push(`Investment activity remains stable at Rs ${signals.investments.current.toLocaleString('en-IN')}.`);
+  }
+
+  return insights.slice(0, 5);
+}
+
+function normalizeFinanceCategory(value) {
+  const raw = String(value || '').toLowerCase();
+  if (/food|dining|restaurant|delivery|grocery|swiggy|zomato/.test(raw)) return 'Food';
+  if (/cloth|apparel|fashion|shirt|shoe/.test(raw)) return 'Clothing';
+  if (/travel|flight|hotel|cab|taxi|fuel|train/.test(raw)) return 'Travel';
+  if (/entertain|movie|netflix|ott|game/.test(raw)) return 'Entertainment';
+  if (/health|medical|pharmacy|doctor|hospital/.test(raw)) return 'Healthcare';
+  if (/education|course|tuition|book|bootcamp/.test(raw)) return 'Education';
+  if (/invest|stock|share|mutual|fund|portfolio|lic|insurance/.test(raw)) return 'Investment';
+  if (/shop|purchase|retail|amazon|flipkart/.test(raw)) return 'Shopping';
+  return titleCase(raw.replace(/[^a-z0-9 ]/g, ' ').trim() || 'Shopping');
+}
+
+function inferCategoryFromFileName(fileName = '') {
+  return normalizeFinanceCategory(fileName);
+}
+
+function normalizeRecordDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return todayKey();
+  return date.toISOString().split('T')[0];
+}
+
+function positiveNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+function titleCase(value) {
+  return String(value || '').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 export const getMarketAnalysis = async (req, res) => {
   try {

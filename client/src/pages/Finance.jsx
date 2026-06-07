@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 import { useGamification } from '../context/GamificationContext';
@@ -25,6 +25,8 @@ function Finance() {
   // ── Backend health data state (for Retail Therapy Alert) ──
   const [healthData, setHealthData] = useState(null);
   const [healthLoading, setHealthLoading] = useState(true);
+  const [careerData, setCareerData] = useState(null);
+  const [careerLoading, setCareerLoading] = useState(true);
 
   // ── Live exchange rate state ──
   const [exchangeRates, setExchangeRates] = useState(null);
@@ -35,6 +37,8 @@ function Finance() {
   // ── AI Macro Market Analysis state ──
   const [marketData, setMarketData] = useState(null);
   const [marketLoading, setMarketLoading] = useState(true);
+  const [documentIntelligence, setDocumentIntelligence] = useState(null);
+  const [documentIntelligenceLoading, setDocumentIntelligenceLoading] = useState(true);
 
   const hasAutonomousSyncedRef = useRef(false);
 
@@ -83,7 +87,7 @@ function Finance() {
 
       runAutonomousSync();
     }
-  }, []);
+  }, [triggerReward]);
 
   // ═════════════════════════════════════════════
   // 2. Fetch finance data from backend
@@ -162,6 +166,26 @@ function Finance() {
     fetchHealthData();
   }, []);
 
+  useEffect(() => {
+    const fetchCareerData = async () => {
+      setCareerLoading(true);
+      try {
+        const token = localStorage.getItem('authToken');
+        const response = await axios.get(`${API_BASE_URL}/api/integrations/career`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.data.success) {
+          setCareerData(response.data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch career data for finance cross intelligence:', err);
+      } finally {
+        setCareerLoading(false);
+      }
+    };
+    fetchCareerData();
+  }, []);
+
   // ═════════════════════════════════════════════
   // 4. Fetch live exchange rates (auto-refresh every 60s)
   // ═════════════════════════════════════════════
@@ -187,7 +211,7 @@ function Finance() {
   }, []);
 
   useEffect(() => {
-    fetchExchangeRates();
+    Promise.resolve().then(fetchExchangeRates);
     const interval = setInterval(fetchExchangeRates, 60000);
     return () => clearInterval(interval);
   }, [fetchExchangeRates]);
@@ -213,6 +237,36 @@ function Finance() {
       }
     };
     fetchMarketAnalysis();
+  }, []);
+
+  useEffect(() => {
+    const fetchDocumentIntelligence = async () => {
+      setDocumentIntelligenceLoading(true);
+      try {
+        const token = localStorage.getItem('authToken');
+        const response = await axios.get(`${API_BASE_URL}/api/finance/document-intelligence`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (response.data.success) {
+          setDocumentIntelligence(response.data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch finance document intelligence:', err);
+        setDocumentIntelligence({
+          status: 'empty',
+          message: 'No financial history available yet.',
+          detail: 'Upload bills, receipts, or financial documents to detect unusual spending patterns.',
+          insights: [],
+          spikes: [],
+          categoryAnalysis: [],
+        });
+      } finally {
+        setDocumentIntelligenceLoading(false);
+      }
+    };
+    fetchDocumentIntelligence();
+    window.addEventListener('upload-history-updated', fetchDocumentIntelligence);
+    return () => window.removeEventListener('upload-history-updated', fetchDocumentIntelligence);
   }, []);
 
 
@@ -417,7 +471,8 @@ function Finance() {
       {/* ── Unusual Spending Spike Detector + Macro Market Analysis ── */}
       <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
         <article className={`${glassCardClass} p-6 xl:col-span-7`}>
-          <div className="mb-7 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <SpendingSpikeDetector intelligence={documentIntelligence} loading={documentIntelligenceLoading} />
+          <div className="hidden">
             <div>
               <h2 className="text-xl font-semibold text-white">Unusual Spending Spike Detector</h2>
               <p className="mt-1 text-sm text-white/80">AI behavioral anomaly detection</p>
@@ -427,7 +482,7 @@ function Finance() {
             </span>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="hidden">
             <div className="space-y-4">
               <div className="rounded-2xl border-l-4 border-[#c8a84b] bg-white/5 p-4">
                 <div className="flex items-start gap-3">
@@ -511,18 +566,12 @@ function Finance() {
         </article>
 
         <article className={`${glassCardClass} p-6 space-y-4 xl:col-span-6`}>
-              <h2 className="text-xl font-semibold text-white">Cross Intelligence</h2>
-          <RecommendationCard
-            icon={WarningIcon}
-            title="Overspending Inflation Correlates to Stress"
-            detail="When spending climbs past target budgets, internal economic pressure compromises focus, triggering reactive lifestyle cycles."
-            tone="warm"
-          />
-          <RecommendationCard
-            icon={MindIcon}
-            title="Biometric Stress & Health Degradation Risk"
-            detail="Spike indicators show higher financial anomalies precisely when sleep drops below 6.5 hours. Wellness directly dictates savings retention."
-            tone="primary"
+          <CrossIntelligencePanel
+            documentIntelligence={documentIntelligence}
+            financeData={financeData}
+            healthData={healthData}
+            careerData={careerData}
+            loading={documentIntelligenceLoading || financeLoading || healthLoading || careerLoading}
           />
         </article>
       </section>
@@ -785,6 +834,223 @@ function RetailTherapyAlert({ alert }) {
 /* ═══════════════════════════════════════════════
    COMPONENT: Alert Metric Chip
    ═══════════════════════════════════════════════ */
+function SpendingSpikeDetector({ intelligence, loading }) {
+  const status = intelligence?.status;
+  const spikes = intelligence?.spikes || [];
+  const categoryAnalysis = intelligence?.categoryAnalysis || [];
+  const visibleItems = spikes.length ? spikes : categoryAnalysis.filter((item) => item.severity !== 'Normal');
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <PanelTitle title="Unusual Spending Spike Detector" subtitle="Reading uploaded finance documents" />
+        {[1, 2, 3].map((item) => <div key={item} className="finance-pulse-skeleton h-16 rounded-2xl bg-white/5" />)}
+      </div>
+    );
+  }
+
+  if (status === 'empty' || !intelligence) {
+    return (
+      <div className="space-y-5">
+        <PanelTitle title="Unusual Spending Spike Detector" subtitle="Document-based anomaly detection" badge="Empty State" />
+        <EmptyFinanceState title="No financial history available yet." detail="Upload bills, receipts, or financial documents to detect unusual spending patterns." />
+      </div>
+    );
+  }
+
+  if (status === 'insufficient') {
+    return (
+      <div className="space-y-5">
+        <PanelTitle title="Unusual Spending Spike Detector" subtitle={`${intelligence.documentCount || 1} finance document found`} badge="Needs History" />
+        <EmptyFinanceState title="More spending history is needed before unusual spending can be detected." detail="Need at least 2-3 finance records for comparison." />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <PanelTitle title="Unusual Spending Spike Detector" subtitle={`${intelligence.documentCount || 0} uploaded finance documents analyzed`} badge={visibleItems.length ? 'Document Signal' : 'No Spikes'} />
+      {visibleItems.length ? (
+        <div className="space-y-4">
+          {visibleItems.slice(0, 3).map((item) => (
+            <div key={item.category} className="rounded-2xl border-l-4 bg-white/5 p-4" style={{ borderLeftColor: severityColor(item.severity) }}>
+              <div className="flex items-start gap-3">
+                <WarningIcon className="mt-0.5 h-5 w-5 shrink-0" style={{ color: severityColor(item.severity) }} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-base font-semibold text-white">{item.title}</p>
+                    <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em]" style={{ color: severityColor(item.severity) }}>
+                      {item.severity}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm leading-6 text-white/90">{item.description}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <MiniStat label="Historical average" value={formatRs(visibleItems[0]?.average)} />
+            <MiniStat label="Current expense" value={formatRs(visibleItems[0]?.current)} />
+            <MiniStat label="Difference" value={`+${visibleItems[0]?.changePct || 0}%`} />
+          </div>
+        </div>
+      ) : (
+        <EmptyFinanceState title="No unusual spending spikes detected." detail="Uploaded finance documents do not show category increases above the 20% threshold." />
+      )}
+    </div>
+  );
+}
+
+function CrossIntelligencePanel({ documentIntelligence, financeData, healthData, careerData, loading }) {
+  const insights = buildCrossDomainFinanceInsights({ financeData, healthData, careerData, documentIntelligence });
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <PanelTitle title="Cross Intelligence" subtitle="Connecting finance with health and career signals" />
+        {[1, 2, 3].map((item) => <div key={item} className="finance-pulse-skeleton h-14 rounded-2xl bg-white/5" />)}
+      </div>
+    );
+  }
+
+  if (!financeData && !healthData && !careerData) {
+    return (
+      <div className="space-y-4">
+        <PanelTitle title="Cross Intelligence" subtitle="Finance × Health × Career" badge="No Signals" />
+        <EmptyFinanceState title="No cross-domain data available yet." detail="Connect or sync finance, health, and career data to see how money patterns affect wellbeing and productivity." />
+      </div>
+    );
+  }
+
+  if (!insights.length) {
+    return (
+      <div className="space-y-4">
+        <PanelTitle title="Cross Intelligence" subtitle="Finance × Health × Career" badge="Stable" />
+        <EmptyFinanceState title="No strong cross-domain finance signals detected." detail="Current finance, health, and career readings do not show a meaningful relationship that needs action." />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <PanelTitle title="Cross Intelligence" subtitle="Finance × Health × Career signals" badge="Live Twin Data" />
+      <ul className="space-y-3">
+        {insights.slice(0, 5).map((insight, index) => (
+          <li key={`${insight}-${index}`} className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-6 text-white/88">
+            <span className="mr-2 text-[#7df3cc]">•</span>{insight}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function buildCrossDomainFinanceInsights({ financeData, healthData, careerData, documentIntelligence }) {
+  const insights = [];
+  const monthlyExpenses = Number(financeData?.monthlyExpenses || 0);
+  const totalSalary = Number(financeData?.totalSalary || 0);
+  const savingsRate = parsePercent(financeData?.metrics?.monthlySavingsRate);
+  const portfolioValue = Number(financeData?.portfolioValue || 0);
+  const transactions = Array.isArray(financeData?.recentTransactions) ? financeData.recentTransactions : [];
+  const discretionarySpend = transactions
+    .filter((txn) => /food|dining|entertainment|shopping|retail/i.test(String(txn.category || txn.merchant || '')))
+    .reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
+
+  const sleepHours = Number(healthData?.metrics?.sleepHours || 0);
+  const hrv = Number(healthData?.metrics?.hrv || 0);
+  const steps = Number(healthData?.metrics?.steps || 0);
+  const commits = Number(careerData?.githubCommitsThisWeek || 0);
+  const meetings = Number(careerData?.hoursInMeetingsToday || 0);
+  const courseProgress = parsePercent(careerData?.learning?.courseProgress);
+  const topSpike = documentIntelligence?.spikes?.[0] || documentIntelligence?.categoryAnalysis?.find((item) => item.severity !== 'Normal');
+
+  if (totalSalary > 0 && monthlyExpenses > 0) {
+    const expenseRatio = Math.round((monthlyExpenses / totalSalary) * 100);
+    if (expenseRatio >= 70 && sleepHours > 0 && sleepHours < 6.5) {
+      insights.push(`Monthly expenses are using ${expenseRatio}% of income while sleep is ${sleepHours}h, suggesting finance pressure may be affecting recovery.`);
+    } else {
+      insights.push(`Monthly expenses are ${expenseRatio}% of income, leaving a savings rate of ${Number.isFinite(savingsRate) ? `${savingsRate}%` : 'limited visible'} for stability planning.`);
+    }
+  }
+
+  if (discretionarySpend > 0 && meetings > 0) {
+    insights.push(`Discretionary spending is Rs ${Math.round(discretionarySpend).toLocaleString('en-IN')} while meeting load is ${meetings}h today; high-workload days may be influencing convenience purchases.`);
+  }
+
+  if (portfolioValue > 0 && courseProgress > 0) {
+    insights.push(`Portfolio value is Rs ${Math.round(portfolioValue).toLocaleString('en-IN')} and active course progress is ${courseProgress}%, linking investment growth with career upskilling momentum.`);
+  }
+
+  if (Number.isFinite(savingsRate) && savingsRate >= 25 && commits >= 10) {
+    insights.push(`Savings rate is ${savingsRate}% while GitHub activity shows ${commits} commits this week, indicating finance stability is supporting career execution.`);
+  } else if (commits > 0 && monthlyExpenses > 0) {
+    insights.push(`Career activity shows ${commits} commits this week alongside Rs ${Math.round(monthlyExpenses).toLocaleString('en-IN')} in monthly expenses; protect focus by keeping fixed costs predictable.`);
+  }
+
+  if (hrv > 0 && hrv < 45 && monthlyExpenses > 0) {
+    insights.push(`HRV is ${hrv}ms and monthly spending is Rs ${Math.round(monthlyExpenses).toLocaleString('en-IN')}; stress signals and finance load should be reviewed together.`);
+  }
+
+  if (steps > 0 && steps < 6000 && discretionarySpend > 0) {
+    insights.push(`Steps are ${steps.toLocaleString('en-IN')} and discretionary spending is Rs ${Math.round(discretionarySpend).toLocaleString('en-IN')}; low-activity days may be pairing with higher convenience spending.`);
+  }
+
+  if (topSpike) {
+    insights.push(`${topSpike.category} spending increased by ${topSpike.changePct}% versus its document-based average, making it the clearest finance category to compare against health and career patterns.`);
+  }
+
+  return Array.from(new Set(insights)).slice(0, 5);
+}
+
+function parsePercent(value) {
+  if (value === null || value === undefined || value === '') return NaN;
+  const number = Number(String(value).replace('%', '').trim());
+  return Number.isFinite(number) ? number : NaN;
+}
+
+function PanelTitle({ title, subtitle, badge }) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div>
+        <h2 className="text-xl font-semibold text-white">{title}</h2>
+        <p className="mt-1 text-sm text-white/80">{subtitle}</p>
+      </div>
+      {badge && (
+        <span className="w-fit rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-[#c8a84b]">
+          {badge}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function EmptyFinanceState({ title, detail }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
+      <div className="flex items-start gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/5 text-[#c8a84b]">
+          <VerifiedIcon className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-white">{title}</p>
+          <p className="mt-1 text-sm leading-6 text-white/70">{detail}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function severityColor(severity) {
+  if (severity === 'Unusual Spending Spike') return '#ff4d7d';
+  if (severity === 'High Increase') return '#ffb020';
+  if (severity === 'Moderate Increase') return '#c8a84b';
+  return '#10c7a1';
+}
+
+function formatRs(value) {
+  return `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
+}
+
 function AlertMetricChip({ label, value, color }) {
   return (
     <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3 transition-all hover:bg-white/[0.06]">
@@ -1002,21 +1268,6 @@ function Legend({ color, label }) {
   );
 }
 
-function RecommendationCard({ icon: Icon, title, detail, tone }) {
-  const warm = tone === 'warm';
-
-  return (
-    <button className={`group w-full rounded-lg border p-4 text-left transition ${warm ? 'border-[#efcfc5] hover:bg-[#fff1ed]' : 'border-[#c8dbe2] bg-[#eef6f8]/60 hover:bg-[#eef6f8]'}`} type="button">
-      <div className="mb-2 flex items-start justify-between">
-        <Icon className={`h-5 w-5 ${warm ? 'text-[#8b4e3f]' : 'text-[#416f82]'}`} />
-        <ArrowRightIcon className="h-4 w-4 text-[#596467]/50 transition group-hover:text-[#416f82]" />
-      </div>
-      <p className="font-semibold text-sm text-gray-900">{title}</p>
-      <p className="mt-1 text-xs leading-5 text-[#596467]">{detail}</p>
-    </button>
-  );
-}
-
 /* ═══════════════════════════════════════════════
    SVG ICONS
    ═══════════════════════════════════════════════ */
@@ -1037,8 +1288,8 @@ function ArrowUpIcon({ className }) {
   return <IconBase className={className}><path d="M12 19V5M6 11l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></IconBase>;
 }
 
-function WarningIcon({ className }) {
-  return <IconBase className={className}><path d="M12 9v4M12 17h.01M10.3 4.4 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.4a2 2 0 0 0-3.4 0Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></IconBase>;
+function WarningIcon({ className, style }) {
+  return <IconBase className={className} style={style}><path d="M12 9v4M12 17h.01M10.3 4.4 2.7 18a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 4.4a2 2 0 0 0-3.4 0Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></IconBase>;
 }
 
 function ArrowRightIcon({ className }) {
@@ -1052,10 +1303,6 @@ function BoltIcon({ className }) {
 
 function VerifiedIcon({ className }) {
   return <IconBase className={className}><path d="M20 7 9 18l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></IconBase>;
-}
-
-function MindIcon({ className }) {
-  return <IconBase className={className}><path d="M9 18h6M10 22h4M8 14a6 6 0 1 1 8 0c-1.2.8-1.5 1.8-1.5 3h-5c0-1.2-.3-2.2-1.5-3Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></IconBase>;
 }
 
 function RefreshIcon({ className }) {

@@ -2,7 +2,7 @@ import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import {
   createFinance, getFinance, getFinanceAnalytics,
-  getFinanceTrajectory, getMarketAnalysis, updateFinance,
+  getDocumentFinanceIntelligence, getFinanceTrajectory, getMarketAnalysis, updateFinance,
 } from '../controllers/financeController.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import DailyTracking from '../models/DailyTracking.js';
@@ -15,6 +15,7 @@ router.get('/',                authenticateToken, asyncHandler(getFinance));
 router.post('/',               authenticateToken, asyncHandler(createFinance));
 router.put('/',                authenticateToken, asyncHandler(updateFinance));
 router.get('/analytics',       authenticateToken, asyncHandler(getFinanceAnalytics));
+router.get('/document-intelligence', authenticateToken, asyncHandler(getDocumentFinanceIntelligence));
 router.get('/trajectory',      authenticateToken, asyncHandler(getFinanceTrajectory));
 router.get('/market-analysis', authenticateToken, asyncHandler(getMarketAnalysis));
 
