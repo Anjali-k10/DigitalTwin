@@ -7,7 +7,9 @@ import {
   deleteGoalFromAssistant,
   getDashboardForAssistant,
   getFinanceForAssistant,
+  getFinanceIntegrationForAssistant,
   getGoalsForAssistant,
+  getIntegrationStatusForAssistant,
   getSettings,
   processAssistantCommand,
 } from '../../services/voiceAssistantService';
@@ -15,6 +17,8 @@ import { createDeepgramAssistantStream } from '../../services/deepgramService';
 import TwinAssistantButton from './TwinAssistantButton';
 import { TwinAssistantContext } from './twinAssistantContext';
 import { logoutUser } from '../../features/auth/authThunks';
+import { useDashboardSync } from '../../context/DashboardSyncContext';
+import { useIntegrations } from '../../context/IntegrationContext';
 
 const VOICE_TOAST_DURATION_MS = 2500;
 
@@ -36,6 +40,8 @@ voiceToast.error = (message, options = {}) => {
 export default function TwinAssistantProvider({ children }) {
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { dashboardData } = useDashboardSync();
+  const { integrations } = useIntegrations();
   const [enabled, setEnabled] = useState(false);
   const [preferences, setPreferences] = useState({
     backgroundListening: true,
@@ -231,6 +237,20 @@ export default function TwinAssistantProvider({ children }) {
     });
   }, [preferences.voiceResponses, transitionVoiceState]);
 
+  const getDashboardScoreSnapshot = useCallback(async () => {
+    const [dashboardResult, financeResult, integrationResult] = await Promise.allSettled([
+      getDashboardForAssistant(),
+      getFinanceIntegrationForAssistant(),
+      getIntegrationStatusForAssistant(),
+    ]);
+
+    return {
+      dashboardData: dashboardData || (dashboardResult.status === 'fulfilled' ? dashboardResult.value?.data : null),
+      financeData: financeResult.status === 'fulfilled' ? financeResult.value?.data : null,
+      integrations: integrations || (integrationResult.status === 'fulfilled' ? integrationResult.value?.data : null),
+    };
+  }, [dashboardData, integrations]);
+
   const executeAction = useCallback(async (action) => {
     if (!action) return;
 
@@ -270,10 +290,28 @@ export default function TwinAssistantProvider({ children }) {
     }
 
     if (action.action === 'create_goal') {
-      await createGoalFromAssistant(action);
-      navigate('/goals');
-      console.log('[VOICE] Navigation complete');
-      await speakAssistantResponse(`Created goal: ${action.title}`, { force: true });
+      try {
+        const result = await createGoalFromAssistant(action);
+        const createdGoal = result?.data || {};
+        const createdTitle = createdGoal.title || action.title || 'your goal';
+        const createdResponse = `Created goal: ${createdTitle}.`;
+        setAssistantMessage(createdResponse);
+        addMessage('assistant', createdResponse);
+        lastAssistantResponseRef.current = normalizeCommandText(createdResponse);
+        window.dispatchEvent(new Event('goals-updated'));
+        window.dispatchEvent(new Event('gamification-updated'));
+        navigate('/goals');
+        voiceToast.success('Goal Created');
+        console.log('[VOICE] Navigation complete');
+        await speakAssistantResponse(createdResponse, { force: true });
+      } catch (error) {
+        const errorResponse = error.response?.data?.message || 'I could not create that goal. Please try again with a title and target.';
+        setAssistantMessage(errorResponse);
+        addMessage('assistant', errorResponse);
+        lastAssistantResponseRef.current = normalizeCommandText(errorResponse);
+        voiceToast.error('Goal creation failed');
+        await speakAssistantResponse(errorResponse, { force: true });
+      }
       return;
     }
 
@@ -300,8 +338,8 @@ export default function TwinAssistantProvider({ children }) {
     }
 
     if (action.action === 'answer_health_score') {
-      const result = await getDashboardForAssistant();
-      const healthResponse = formatDashboardHealthResponse(result);
+      const snapshot = await getDashboardScoreSnapshot();
+      const healthResponse = formatDashboardHealthResponse(snapshot);
       setAssistantMessage(healthResponse);
       addMessage('assistant', healthResponse);
       lastAssistantResponseRef.current = normalizeCommandText(healthResponse);
@@ -311,8 +349,8 @@ export default function TwinAssistantProvider({ children }) {
     }
 
     if (action.action === 'answer_dashboard_metric') {
-      const result = await getDashboardForAssistant();
-      const metricResponse = formatDashboardMetricResponse(result, action.metric);
+      const snapshot = await getDashboardScoreSnapshot();
+      const metricResponse = formatDashboardMetricResponse(snapshot, action.metric);
       setAssistantMessage(metricResponse);
       addMessage('assistant', metricResponse);
       lastAssistantResponseRef.current = normalizeCommandText(metricResponse);
@@ -338,7 +376,7 @@ export default function TwinAssistantProvider({ children }) {
       console.log('[VOICE] Navigation complete');
       await speakAssistantResponse('Logging out. Please wait while I complete your request.', { force: true });
     }
-  }, [addMessage, dispatch, navigate, speakAssistantResponse, transitionVoiceState]);
+  }, [addMessage, dispatch, getDashboardScoreSnapshot, navigate, speakAssistantResponse, transitionVoiceState]);
 
   const submitTranscript = useCallback(async (spokenText) => {
     const command = String(spokenText || '').trim();
@@ -820,6 +858,9 @@ function parseLocalAssistantCommand(rawCommand = '') {
     };
   }
 
+  const goalAction = parseGoalCommand(command);
+  if (goalAction) return goalAction;
+
   const navigationVerb = /\b(open|go to|show|navigate to|take me to|launch|switch to|visit)\b/.test(command);
   for (const item of navigationTargets) {
     const matched = item.patterns.some((pattern) => command === pattern || command.includes(pattern));
@@ -856,6 +897,85 @@ async function deleteMatchingGoal(query) {
   const bestMatch = rankedGoals[0].goal;
   await deleteGoalFromAssistant(bestMatch._id);
   return `Deleted goal: ${bestMatch.title}.`;
+}
+
+function parseGoalCommand(command) {
+  const match = command.match(/\b(?:create|add|set|make)\s+(?:me\s+|my\s+)?(?:a\s+|an\s+)?(?:new\s+)?goal(?:\s+(?:to|for|called|named|about))?\s+(.+)$/);
+  if (!match?.[1]) return null;
+
+  const rawTitle = cleanGoalTitle(match[1]);
+  if (!rawTitle) return null;
+
+  const amount = parseGoalAmount(command);
+  const domain = inferGoalDomain(command);
+  const unit = inferGoalUnit(command, domain, amount);
+  const title = toTitleCase(rawTitle);
+
+  return {
+    action: 'create_goal',
+    intent: 'CREATE_GOAL',
+    title,
+    domain,
+    targetMetric: amount || 1,
+    unit,
+    priority: inferGoalPriority(command),
+    deadline: getFutureDate(90),
+    description: `Created by Twin Assistant from: "${command}"`,
+    response: `Creating goal: ${title}...`,
+  };
+}
+
+function cleanGoalTitle(value = '') {
+  return String(value)
+    .replace(/\b(please|now|today)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function toTitleCase(value = '') {
+  return String(value)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function inferGoalDomain(command) {
+  if (/\b(save|saving|rupee|rupees|rs|inr|lakh|money|finance|invest|sip|budget|spend)\b/.test(command)) return 'finance';
+  if (/\b(health|fitness|sleep|workout|exercise|weight|kg|water|run|walk)\b/.test(command)) return 'health';
+  return 'career';
+}
+
+function inferGoalUnit(command, domain, amount) {
+  if (/\bleetcode|problem|problems\b/.test(command)) return 'problems';
+  if (/\bproject|projects\b/.test(command)) return 'projects';
+  if (/\bbook|books\b/.test(command)) return 'books';
+  if (/\bhour|hours\b/.test(command)) return 'hours';
+  if (/\bkg|weight\b/.test(command)) return 'kg';
+  if (/\bkm|kilometer|kilometers\b/.test(command)) return 'km';
+  if (/\bliter|liters|litre|litres|water\b/.test(command)) return 'liters';
+  if (domain === 'finance' && amount) return 'Rs';
+  return 'milestone';
+}
+
+function inferGoalPriority(command) {
+  if (/\b(urgent|important|high priority|critical)\b/.test(command)) return 'high';
+  if (/\b(low priority|someday)\b/.test(command)) return 'low';
+  return 'medium';
+}
+
+function parseGoalAmount(command) {
+  const lakhMatch = command.match(/(\d+(?:\.\d+)?)\s*lakh/);
+  if (lakhMatch) return Number(lakhMatch[1]) * 100000;
+
+  const numberMatch = command.match(/(?:rs|rupees|inr)?\s*(\d+(?:\.\d+)?)/);
+  return numberMatch ? Number(numberMatch[1]) : null;
+}
+
+function getFutureDate(days) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function scoreGoalMatch(query, title) {
@@ -955,30 +1075,134 @@ function formatDashboardMetricResponse(result, metric) {
   const metrics = getDashboardMetrics(result);
   if (metric === 'healthScore' && Number.isFinite(metrics.healthScore)) return `Your current health score is ${metrics.healthScore}%.`;
   if (metric === 'financeScore' && Number.isFinite(metrics.financeScore)) return `Your current finance score is ${metrics.financeScore}%.`;
-  if ((metric === 'careerScore' || metric === 'productivityScore') && Number.isFinite(metrics.productivityScore)) return `Your current productivity score is ${metrics.productivityScore}%.`;
+  if (metric === 'careerScore' && Number.isFinite(metrics.careerScore)) return `Your current career score is ${metrics.careerScore}%.`;
+  if (metric === 'productivityScore' && Number.isFinite(metrics.productivityScore)) return `Your current productivity score is ${metrics.productivityScore}%.`;
   if (metric === 'savingsRate' && Number.isFinite(metrics.savingsRate)) return `Your current savings rate is ${metrics.savingsRate}%.`;
   return 'I checked your dashboard data, but I could not find that metric yet.';
 }
 
 function getDashboardMetrics(result) {
-  const dashboard = result?.data || {};
-  const profile = dashboard.profile || {};
-  const analytics = dashboard.analytics || {};
-  const burnoutRisk = pickNumber(analytics.burnoutRisk, profile.burnoutRisk);
-  const wellnessBalance = pickNumber(analytics.wellnessBalance, profile.wellnessBalance);
-  const productivityScore = pickNumber(analytics.productivityScore, profile.productivityScore);
-  const financeScore = pickNumber(analytics.financialHealth, profile.financialHealth);
-  const income = pickNumber(profile.monthlyIncome, 0);
-  const expenditure = pickNumber(profile.monthlyExpenditure, 0);
+  const dashboard = result?.dashboardData || result?.data || {};
+  const liveFinanceData = result?.financeData || null;
+  const liveIntegrations = result?.integrations || null;
+  const rawProfile = dashboard.profile || {};
+  const profile = normalizeDashboardProfile(rawProfile);
+  const analytics = dashboard.analytics || profile.aiScores || {};
+
+  const sleepHours = pickNumber(profile.lifestyle.sleepHours, 7);
+  const studyHours = pickNumber(profile.lifestyle.studyHours, 4);
+  const exerciseFrequency = pickNumber(profile.lifestyle.exerciseFrequency, 2);
+  const stressLevel = pickNumber(profile.financialPatterns.financialStressLevel, 4);
+  const liveIncome = Number(liveFinanceData?.totalSalary);
+  const liveExpenditure = Number(liveFinanceData?.monthlyExpenses);
+  const income = Number.isFinite(liveIncome) && liveIncome > 0
+    ? liveIncome
+    : pickNumber(profile.financialPatterns.monthlyIncome, 0);
+  const expenditure = Number.isFinite(liveExpenditure) && liveExpenditure >= 0
+    ? liveExpenditure
+    : pickNumber(profile.financialPatterns.monthlyExpenditure, 0);
+  const rawSavingsRate = income > 0 ? Math.round(((income - expenditure) / income) * 100) : 0;
+  const integrationSnapshot = liveIntegrations || profile.integrations || {};
+  const connectedCount = Object.values(integrationSnapshot).filter((item) => item?.status === 'connected').length;
+  const hasGithub = integrationSnapshot.github?.status === 'connected';
+  const hasLeetcode = integrationSnapshot.leetcode?.status === 'connected';
+  const smokingHabit = profile.lifestyle.smokingHabits || 'no';
+  const gender = profile.lifestyle.gender || '';
+  const genderThresholds = getGenderThresholds(gender);
+  const periodLoad = gender === 'female' && profile.lifestyle.periodTracking === 'irregular' ? 5 : 0;
+  const maleCredit = gender === 'male' && profile.lifestyle.genderSpecificHealthContext !== 'not_now' && exerciseFrequency >= 3 ? 3 : 0;
+
+  const calcBurnout = clamp(Math.round(
+    42
+      + Math.max(0, genderThresholds.idealSleepHours - sleepHours) * 8
+      + Math.max(0, studyHours - genderThresholds.heavyStudyHours) * 5
+      + stressLevel * 2
+      - exerciseFrequency * 3
+      + (smokingHabit === 'yes' ? 8 : 0)
+      + periodLoad
+      - maleCredit,
+  ), 18, 95);
+  const calcProductivity = clamp(Math.round(
+    58
+      + studyHours * 5
+      + connectedCount * 3
+      + (hasGithub ? 4 : 0)
+      + (hasLeetcode ? 3 : 0)
+      - Math.max(0, genderThresholds.idealSleepHours - sleepHours) * 3
+      - Math.max(0, stressLevel - 6) * 3,
+  ), 30, 98);
+  const calcRecovery = clamp(Math.round(
+    54
+      + sleepHours * 4
+      + exerciseFrequency * genderThresholds.exerciseWeight
+      - stressLevel * 3
+      - (smokingHabit === 'yes' ? 10 : 0)
+      - periodLoad,
+  ), 18, 96);
+  const calcFinance = clamp(Math.round(
+    50 + rawSavingsRate * 0.8 - stressLevel * 2 - (expenditure > income && income > 0 ? 18 : 0),
+  ), 8, 98);
+
+  const burnoutRisk = clamp(pickNumber(analytics.burnoutRisk, profile.aiScores.burnoutRisk, calcBurnout), 0, 100);
+  const wellnessBalance = clamp(pickNumber(analytics.wellnessBalance, profile.aiScores.wellnessBalance, calcRecovery), 0, 100);
+  const productivityScore = clamp(pickNumber(analytics.productivityScore, profile.aiScores.productivityScore, calcProductivity), 0, 100);
+  const financeScore = clamp(pickNumber(analytics.financialHealth, profile.aiScores.financialHealth, calcFinance), 0, 100);
 
   return {
     healthScore: Number.isFinite(burnoutRisk) && Number.isFinite(wellnessBalance)
       ? clamp(Math.round((100 - burnoutRisk) * 0.35 + wellnessBalance * 0.65), 35, 96)
       : NaN,
     financeScore: Number.isFinite(financeScore) ? clamp(Math.round(financeScore), 0, 100) : NaN,
+    careerScore: Number.isFinite(productivityScore) ? clamp(Math.round(productivityScore), 0, 100) : NaN,
     productivityScore: Number.isFinite(productivityScore) ? clamp(Math.round(productivityScore), 0, 100) : NaN,
     savingsRate: income > 0 ? Math.max(0, Math.round(((income - expenditure) / income) * 100)) : NaN,
   };
+}
+
+function normalizeDashboardProfile(rawProfile = {}) {
+  if (rawProfile.lifestyle && rawProfile.financialPatterns) {
+    return {
+      ...rawProfile,
+      aiScores: rawProfile.aiScores || {},
+    };
+  }
+
+  return {
+    integrations: {
+      github: { status: rawProfile.githubUsername ? 'connected' : 'skipped' },
+      leetcode: { status: rawProfile.leetcodeUsername ? 'connected' : 'skipped' },
+      fitbit: { status: rawProfile.fitbitProfile ? 'connected' : 'skipped' },
+      linkedin: { status: rawProfile.linkedinProfile ? 'connected' : 'skipped' },
+      banking: { status: rawProfile.bankingProfile ? 'connected' : 'skipped' },
+    },
+    lifestyle: {
+      gender: rawProfile.gender || '',
+      sleepHours: rawProfile.sleepHours ?? 7,
+      studyHours: rawProfile.studyHours ?? 4,
+      exerciseFrequency: rawProfile.exerciseFrequency ?? 2,
+      smokingHabits: rawProfile.smokingHabit || 'no',
+      periodTracking: rawProfile.periodTracking || 'not_now',
+      genderSpecificHealthContext: rawProfile.genderSpecificHealthContext || 'not_now',
+    },
+    financialPatterns: {
+      monthlyIncome: rawProfile.monthlyIncome ?? 0,
+      monthlyExpenditure: rawProfile.monthlyExpenditure ?? 0,
+      financialStressLevel: rawProfile.financialStressLevel ?? 5,
+    },
+    aiScores: {
+      burnoutRisk: rawProfile.burnoutRisk,
+      productivityScore: rawProfile.productivityScore,
+      financialHealth: rawProfile.financialHealth,
+      wellnessBalance: rawProfile.wellnessBalance,
+    },
+  };
+}
+
+function getGenderThresholds(gender) {
+  if (gender === 'female') {
+    return { idealSleepHours: 7.5, heavyStudyHours: 6, exerciseWeight: 5.5 };
+  }
+  return { idealSleepHours: 7, heavyStudyHours: 7, exerciseWeight: 6 };
 }
 
 function pickNumber(...values) {

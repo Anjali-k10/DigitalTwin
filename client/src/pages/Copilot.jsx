@@ -140,6 +140,7 @@ export default function Copilot() {
   const fileInputRef  = useRef(null);
   const recognitionRef = useRef(null);
   const chatEndRef    = useRef(null);
+  const requestInFlightRef = useRef(false);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -216,6 +217,8 @@ export default function Copilot() {
   };
 
   const handleAskOracle = async (questionOverride) => {
+    if (requestInFlightRef.current || isConsulting) return;
+
     const questionText = questionOverride || chatInput;
     let question = questionText;
 
@@ -245,6 +248,7 @@ export default function Copilot() {
 
     setChatInput('');
     clearChatFile();
+    requestInFlightRef.current = true;
     setIsConsulting(true);
 
     try {
@@ -325,8 +329,10 @@ export default function Copilot() {
           action: 'Please try rephrasing your question or re-uploading the attachment.'
         }
       }]);
+    } finally {
+      requestInFlightRef.current = false;
+      setIsConsulting(false);
     }
-    setIsConsulting(false);
   };
 
   const getFollowUps = () => {
@@ -442,8 +448,8 @@ export default function Copilot() {
               {followUps.length > 0 && !isConsulting && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex gap-2 flex-wrap max-h-24 overflow-y-auto">
                   {followUps.map((chip, i) => (
-                    <button key={i} onClick={() => handleAskOracle(chip)}
-                      className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/60 transition hover:bg-white/10 hover:text-white">
+                    <button key={i} onClick={() => handleAskOracle(chip)} disabled={isConsulting}
+                      className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
                       <ChevronRight className="h-3 w-3 text-[#7b61ff]" /> {chip}
                     </button>
                   ))}
@@ -486,7 +492,12 @@ export default function Copilot() {
 
               <div className="relative flex-1">
                 <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleAskOracle()}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAskOracle();
+                    }
+                  }}
                   placeholder={isListening ? 'Listening...' : 'Type a question or ask about an attached file...'}
                   className={`w-full h-12 rounded-xl border pl-4 pr-12 text-xs text-white placeholder-white/25 bg-white/5 focus:outline-none transition-colors ${
                     isListening ? 'border-[#ff4d7d]/50 bg-[#ff4d7d]/5' : 'border-white/10 focus:border-[#7b61ff]'}`}

@@ -35,14 +35,14 @@ export function parseAssistantCommand(rawCommand = '') {
   const financeQuestionAction = parseFinanceQuestion(command);
   if (financeQuestionAction) return financeQuestionAction;
 
-  const navigationAction = parseNavigation(command);
-  if (navigationAction) return navigationAction;
-
   const deleteGoalAction = parseDeleteGoal(command);
   if (deleteGoalAction) return deleteGoalAction;
 
   const goalAction = parseGoal(command);
   if (goalAction) return goalAction;
+
+  const navigationAction = parseNavigation(command);
+  if (navigationAction) return navigationAction;
 
   const simulationAction = parseSimulation(command);
   if (simulationAction) return simulationAction;
@@ -210,7 +210,7 @@ function parseDeleteGoal(command) {
 }
 
 function parseGoal(command) {
-  const goalMatch = command.match(/\b(?:create|add|set|make)\s+(?:a\s+)?goal\s+(?:to|for|called|named)?\s*(.+)$/);
+  const goalMatch = command.match(/\b(?:create|add|set|make)\s+(?:me\s+|my\s+)?(?:a\s+|an\s+)?(?:new\s+)?goal(?:\s+(?:to|for|called|named|about))?\s+(.+)$/);
   if (!goalMatch?.[1]) return null;
 
   const rawTitle = cleanTrailingWords(goalMatch[1]);
@@ -291,9 +291,9 @@ function toTitleCase(value) {
 }
 
 function inferGoalDomain(command) {
-  if (/\b(save|saving|rupees|lakh|money|finance|invest)\b/.test(command)) return 'finance';
-  if (/\b(developer|frontend|career|job|study|learn|project)\b/.test(command)) return 'career';
-  if (/\b(health|fitness|sleep|workout|exercise|weight)\b/.test(command)) return 'health';
+  if (/\b(save|saving|rupee|rupees|rs|inr|lakh|money|finance|invest|sip|budget|spend)\b/.test(command)) return 'finance';
+  if (/\b(health|fitness|sleep|workout|exercise|weight|kg|water|run|walk)\b/.test(command)) return 'health';
+  if (/\b(developer|frontend|career|job|study|learn|project|leetcode|book)\b/.test(command)) return 'career';
   return 'career';
 }
 

@@ -31,16 +31,17 @@ export async function processAssistantCommand(command) {
 }
 
 export async function createGoalFromAssistant(action) {
+  const deadline = action.deadline || getFutureDate(90);
   const response = await axios.post(
     `${API_BASE_URL}/api/goals`,
     {
       domain: action.domain || 'career',
-      title: action.title,
+      title: action.title || 'New Goal',
       description: action.description || '',
       targetMetric: Number(action.targetMetric || 1),
       unit: action.unit || 'milestone',
       priority: action.priority || 'medium',
-      deadline: action.deadline,
+      deadline,
     },
     { headers: authHeaders() },
   );
@@ -64,6 +65,7 @@ export async function deleteGoalFromAssistant(goalId) {
 export async function getDashboardForAssistant() {
   const response = await axios.get(`${API_BASE_URL}/api/dashboard`, {
     headers: authHeaders(),
+    params: { _t: Date.now() },
   });
   return response.data;
 }
@@ -71,6 +73,22 @@ export async function getDashboardForAssistant() {
 export async function getFinanceForAssistant() {
   const response = await axios.get(`${API_BASE_URL}/api/finance`, {
     headers: authHeaders(),
+  });
+  return response.data;
+}
+
+export async function getFinanceIntegrationForAssistant() {
+  const response = await axios.get(`${API_BASE_URL}/api/integrations/finance`, {
+    headers: authHeaders(),
+    params: { _t: Date.now() },
+  });
+  return response.data;
+}
+
+export async function getIntegrationStatusForAssistant() {
+  const response = await axios.get(`${API_BASE_URL}/api/integrations/status`, {
+    headers: authHeaders(),
+    params: { _t: Date.now() },
   });
   return response.data;
 }
@@ -94,4 +112,10 @@ export async function runSimulationForAssistant(payload = {}) {
     { headers: authHeaders() },
   );
   return response.data;
+}
+
+function getFutureDate(days) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 }

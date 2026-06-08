@@ -23,7 +23,7 @@ router.post('/', authenticateToken, async (req, res) => {
     });
 
     const gamification = await GamificationEngine.logEvent(userId, 'GOAL_SET', { goalId: newGoal._id, addedValue: 1 });
-    await createNotification({
+    createNotification({
       userId,
       category: 'goal',
       subType: 'goal-created',
@@ -33,6 +33,8 @@ router.post('/', authenticateToken, async (req, res) => {
       motivation: 'Every expert was once a beginner.',
       actionLink: '/goals',
       sendEmail: true,
+    }).catch((notificationError) => {
+      console.error('Goal notification creation failed:', notificationError);
     });
 
     res.status(201).json({ success: true, data: newGoal, gamification });

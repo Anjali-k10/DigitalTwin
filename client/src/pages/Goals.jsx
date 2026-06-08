@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -138,9 +138,11 @@ function SyncStatusBanner({ syncStatus, onRefresh, refreshing }) {
 // ─── Goal Detail Drawer ───────────────────────────────────────────────────────
 function GoalDetailDrawer({ goal, onClose, onDelete }) {
   const [roadmap, setRoadmap]       = useState(null);
-  const [loading, setLoading]       = useState(true);
+  const [loading, setLoading]       = useState(false);
+  const [roadmapRequested, setRoadmapRequested] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting]     = useState(false);
+  const roadmapRequestInFlightRef = useRef(false);
 
   const cfg        = DOMAIN_CONFIG[goal.domain] || DOMAIN_CONFIG.health;
   const Icon       = cfg.icon;
@@ -150,6 +152,16 @@ function GoalDetailDrawer({ goal, onClose, onDelete }) {
   const daysLeft   = Math.ceil((new Date(goal.deadline) - new Date()) / 86400000);
 
   useEffect(() => {
+    roadmapRequestInFlightRef.current = false;
+    setRoadmap(null);
+    setRoadmapRequested(false);
+    setLoading(false);
+  }, [goal._id]);
+
+  useEffect(() => {
+    if (!roadmapRequested || roadmapRequestInFlightRef.current) return;
+
+    roadmapRequestInFlightRef.current = true;
     const fetchRoadmap = async () => {
       setLoading(true);
       try {
@@ -178,10 +190,11 @@ function GoalDetailDrawer({ goal, onClose, onDelete }) {
           risks: ['Inconsistency is the #1 killer of long-term goals', 'Avoid comparing your pace to others'],
         });
       }
+      roadmapRequestInFlightRef.current = false;
       setLoading(false);
     };
     fetchRoadmap();
-  }, [goal._id]);
+  }, [goal._id, roadmapRequested]);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -351,6 +364,19 @@ function GoalDetailDrawer({ goal, onClose, onDelete }) {
               <div className="flex flex-col items-center justify-center py-10 text-[#7b61ff]">
                 <Loader2 className="h-8 w-8 animate-spin mb-3" />
                 <p className="text-sm font-semibold animate-pulse">Generating your personal roadmap...</p>
+              </div>
+            ) : !roadmap ? (
+              <div className="rounded-2xl border border-dashed border-[#7b61ff]/25 bg-[#7b61ff]/5 p-5 text-center">
+                <p className="text-sm text-white/60">Generate a personalized roadmap for this goal when you need it.</p>
+                <button
+                  type="button"
+                  onClick={() => setRoadmapRequested(true)}
+                  disabled={loading}
+                  className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#7b61ff]/30 bg-[#7b61ff]/10 px-4 py-2 text-xs font-bold text-[#c084fc] transition hover:bg-[#7b61ff]/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Generate roadmap
+                </button>
               </div>
             ) : roadmap && (
               <div className="space-y-5">
@@ -634,6 +660,7 @@ export default function Goals() {
     };
     window.addEventListener('dashboard-synced', handleSync);
     window.addEventListener('daily-update-completed', handleSync);
+    window.addEventListener('goals-updated', handleSync);
     window.addEventListener('upload-history-updated', handleSync);
     window.addEventListener('dashboard-data-updated', handleSync);
 
@@ -646,6 +673,7 @@ export default function Goals() {
       clearInterval(interval);
       window.removeEventListener('dashboard-synced', handleSync);
       window.removeEventListener('daily-update-completed', handleSync);
+      window.removeEventListener('goals-updated', handleSync);
       window.removeEventListener('upload-history-updated', handleSync);
       window.removeEventListener('dashboard-data-updated', handleSync);
     };

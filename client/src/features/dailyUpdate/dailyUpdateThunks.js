@@ -39,7 +39,12 @@ export const submitDailyUpdate = createAsyncThunk(
       );
       const dailyUpdateLastSubmittedAt = Date.now();
       localStorage.setItem('dailyUpdateLastSubmittedAt', String(dailyUpdateLastSubmittedAt));
-      window.dispatchEvent(new Event('daily-update-completed'));
+      window.dispatchEvent(new CustomEvent('daily-update-completed', {
+        detail: {
+          dailyUpdate: response.data.data,
+          streak: response.data.streak,
+        },
+      }));
 
       window.dispatchEvent(new Event('dashboard-data-updated'));
       return { ...response.data, dailyUpdateLastSubmittedAt };

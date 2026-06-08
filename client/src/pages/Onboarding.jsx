@@ -121,6 +121,7 @@ function Onboarding() {
   const [step, setStep] = useState(1);
   const [navigationDirection, setNavigationDirection] = useState(1);
   const [onboardingData, setOnboardingData] = useState(initialOnboardingData);
+  const [documentUploadStatus, setDocumentUploadStatus] = useState({});
   const [integrationLoadingMessages, setIntegrationLoadingMessages] = useState({});
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [messageIndex, setMessageIndex] = useState(0);
@@ -211,13 +212,12 @@ function Onboarding() {
   // ✅ UPGRADED: Real API Integration for Vision AI File Uploads
   const handleFileUpload = async (documentType, file) => {
     if (!file) return;
-    
-    // 1. Instantly update UI to show it's "Uploading/Parsing"
-    setOnboardingData((current) => ({
+
+    setDocumentUploadStatus((current) => ({
       ...current,
-      dataVault: {
-        ...current.dataVault,
-        [documentType]: "Processing AI OCR...",
+      [documentType]: {
+        state: 'processing',
+        fileName: file.name,
       },
     }));
 
@@ -248,6 +248,13 @@ function Onboarding() {
             [`${documentType}_extracted`]: response.data.data?.extractedData || response.data.data // Save the AI's parsed JSON!
           },
         }));
+        setDocumentUploadStatus((current) => ({
+          ...current,
+          [documentType]: {
+            state: 'success',
+            fileName: file.name,
+          },
+        }));
         
         toast.success(`${file.name} successfully parsed by DigitalTwin AI.`, { id: toastId });
       }
@@ -260,6 +267,13 @@ function Onboarding() {
       setOnboardingData((current) => ({
         ...current,
         dataVault: { ...current.dataVault, [documentType]: null },
+      }));
+      setDocumentUploadStatus((current) => ({
+        ...current,
+        [documentType]: {
+          state: 'error',
+          fileName: file.name,
+        },
       }));
     }
   };
@@ -666,6 +680,7 @@ function Onboarding() {
           description="Lab results or doctor prescriptions." 
           icon={<HeartPulseIcon />}
           uploadedFile={onboardingData.dataVault.medicalReport}
+          uploadStatus={documentUploadStatus.medicalReport}
           onUpload={(file) => handleFileUpload('medicalReport', file)}
         />
         <UploadCard 
@@ -674,6 +689,7 @@ function Onboarding() {
           description="PDFs of your CV or course certificates." 
           icon={<BriefcaseIcon />}
           uploadedFile={onboardingData.dataVault.resume}
+          uploadStatus={documentUploadStatus.resume}
           onUpload={(file) => handleFileUpload('resume', file)}
         />
         <UploadCard 
@@ -682,6 +698,7 @@ function Onboarding() {
           description="Recent PDF exports of your bank ledger." 
           icon={<BankNoteIcon />}
           uploadedFile={onboardingData.dataVault.bankStatement}
+          uploadStatus={documentUploadStatus.bankStatement}
           onUpload={(file) => handleFileUpload('bankStatement', file)}
         />
       </div>
@@ -903,21 +920,54 @@ function Onboarding() {
 // --- SUB COMPONENTS ---
 
 // ✅ NEW: Upload Card Component for the Data Vault
-function UploadCard({ id, title, description, icon, uploadedFile, onUpload }) {
+function UploadCard({ id, title, description, icon, uploadedFile, uploadStatus, onUpload }) {
+  const isProcessing = uploadStatus?.state === 'processing';
+  const hasSucceeded = Boolean(uploadedFile) && uploadStatus?.state !== 'processing';
+  const hasError = uploadStatus?.state === 'error';
+  const cardStateClass = isProcessing
+    ? 'border-[#5f8fa0] bg-[#f7fbfc]'
+    : hasSucceeded
+      ? 'border-[#b8d8c5] bg-[#f4fbf6]'
+      : hasError
+        ? 'border-[#fca5a5] bg-[#fff7f7]'
+        : 'border-[#c8dbe2] bg-white hover:border-[#5f8fa0] hover:bg-[#f7fbfc]';
+  const iconStateClass = isProcessing
+    ? 'bg-[#e5f0f4] text-[#416f82]'
+    : hasSucceeded
+      ? 'bg-[#e6f4ea] text-[#22c55e]'
+      : hasError
+        ? 'bg-[#fee2e2] text-[#dc2626]'
+        : 'bg-[#e5f0f4] text-[#416f82]';
+  const titleText = isProcessing
+    ? 'Processing document'
+    : hasSucceeded
+      ? 'Uploaded Successfully'
+      : hasError
+        ? 'Upload failed'
+        : title;
+  const detailText = isProcessing
+    ? `${uploadStatus.fileName} is under observation. Extracting data...`
+    : hasSucceeded
+      ? uploadedFile
+      : hasError
+        ? `${uploadStatus.fileName} could not be parsed. Try uploading again.`
+        : description;
+
   return (
-    <div className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-colors ${uploadedFile ? 'border-[#b8d8c5] bg-[#f4fbf6]' : 'border-[#c8dbe2] bg-white hover:border-[#5f8fa0] hover:bg-[#f7fbfc]'}`}>
+    <div className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-colors ${cardStateClass}`}>
       <input
         type="file"
         id={id}
-        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-wait"
+        disabled={isProcessing}
         onChange={(e) => onUpload(e.target.files[0])}
         accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
       />
-      <div className={`mb-3 flex h-12 w-12 items-center justify-center rounded-full ${uploadedFile ? 'bg-[#e6f4ea] text-[#22c55e]' : 'bg-[#e5f0f4] text-[#416f82]'}`}>
-        {uploadedFile ? <VerifiedIcon className="h-6 w-6" /> : icon}
+      <div className={`mb-3 flex h-12 w-12 items-center justify-center rounded-full ${iconStateClass}`}>
+        {isProcessing ? <div className="h-5 w-5 rounded-full border-2 border-[#416f82]/25 border-t-[#416f82] animate-spin" /> : hasSucceeded ? <VerifiedIcon className="h-6 w-6" /> : icon}
       </div>
-      <h3 className="text-sm font-bold text-zinc-950">{uploadedFile ? 'Uploaded Successfully' : title}</h3>
-      <p className="mt-1 text-xs text-zinc-500">{uploadedFile ? uploadedFile : description}</p>
+      <h3 className="text-sm font-bold text-zinc-950">{titleText}</h3>
+      <p className="mt-1 text-xs text-zinc-500">{detailText}</p>
     </div>
   );
 }

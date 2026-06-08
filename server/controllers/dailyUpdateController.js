@@ -36,14 +36,18 @@ export const createDailyUpdate = async (req, res) => {
   const payload = normalizePayload(req.body);
   const update = await DailyUpdate.create({ userId, date, ...payload, completed: true });
   const effects = await applyDailyUpdateEffects(userId, date, payload);
-
-  await createNotifications(userId, effects);
+  const profile = await OnboardingProfile.findOne({ userId }).sort({ updatedAt: -1 }).lean();
 
   res.status(201).json({
     success: true,
     message: 'Daily Twin Update completed successfully.',
     data: update,
     effects,
+    streak: buildStreakResponse(profile),
+  });
+
+  createNotifications(userId, effects).catch((error) => {
+    console.error('[DailyUpdateController] notification creation failed:', error);
   });
 };
 
@@ -56,14 +60,18 @@ export const getStreakCalendar = async (req, res) => {
   const profile = await OnboardingProfile.findOne({ userId: req.user.userId }).sort({ updatedAt: -1 }).lean();
   res.status(200).json({
     success: true,
-    data: {
-      currentStreak: profile?.currentStreak || 0,
-      completedDailyGoals: profile?.completedDailyGoals || [],
-      lastGoalCompletionDate: profile?.lastGoalCompletionDate || '',
-      streakStarted: Boolean(profile?.streakStarted),
-    },
+    data: buildStreakResponse(profile),
   });
 };
+
+function buildStreakResponse(profile) {
+  return {
+    currentStreak: profile?.currentStreak || 0,
+    completedDailyGoals: profile?.completedDailyGoals || [],
+    lastGoalCompletionDate: profile?.lastGoalCompletionDate || '',
+    streakStarted: Boolean(profile?.streakStarted),
+  };
+}
 
 async function applyDailyUpdateEffects(userId, date, payload) {
   const [dailyLog, profile] = await Promise.all([

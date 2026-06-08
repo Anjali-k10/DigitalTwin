@@ -9,6 +9,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000
 const Intelligence = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [diagnosticData, setDiagnosticData] = useState(null);
+  const diagnosticsRequestInFlightRef = useRef(false);
   
 
   // Load history on mount
@@ -30,6 +31,9 @@ const Intelligence = () => {
   }, []);
 
   const handleRunDiagnostics = async () => {
+    if (diagnosticsRequestInFlightRef.current || isGenerating) return;
+
+    diagnosticsRequestInFlightRef.current = true;
     setIsGenerating(true);
     try {
       const token = localStorage.getItem('authToken');
@@ -76,6 +80,7 @@ const Intelligence = () => {
       };
       setDiagnosticData(fallback);
     } finally {
+      diagnosticsRequestInFlightRef.current = false;
       setIsGenerating(false);
     }
   };
@@ -129,9 +134,10 @@ const Intelligence = () => {
                 </div>
                 <button
                   onClick={handleRunDiagnostics}
-                  className="px-8 py-4 rounded-2xl bg-gradient-to-r from-[#7b61ff] to-[#10c7a1] font-bold text-base text-white hover:opacity-90 transition-all hover:shadow-[0_0_30px_rgba(123,97,255,0.4)] cursor-pointer border border-white/10"
+                  disabled={isGenerating}
+                  className="px-8 py-4 rounded-2xl bg-gradient-to-r from-[#7b61ff] to-[#10c7a1] font-bold text-base text-white hover:opacity-90 transition-all hover:shadow-[0_0_30px_rgba(123,97,255,0.4)] cursor-pointer border border-white/10 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Run Comprehensive Cross-Domain Analysis
+                  {isGenerating ? 'Running Analysis...' : 'Run Comprehensive Cross-Domain Analysis'}
                 </button>
               </motion.div>
             ) : (
@@ -148,9 +154,10 @@ const Intelligence = () => {
                   </div>
                   <button
                     onClick={handleRunDiagnostics}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-[#7b61ff]/30 bg-[#7b61ff]/10 text-xs font-bold text-white hover:bg-[#7b61ff]/20 transition-all cursor-pointer"
+                    disabled={isGenerating}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-[#7b61ff]/30 bg-[#7b61ff]/10 text-xs font-bold text-white hover:bg-[#7b61ff]/20 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <RefreshCw className="h-4 w-4" /> Generate Fresh Analysis
+                    <RefreshCw className={`h-4 w-4 ${isGenerating ? 'animate-spin' : ''}`} /> {isGenerating ? 'Generating...' : 'Generate Fresh Analysis'}
                   </button>
                 </div>
 

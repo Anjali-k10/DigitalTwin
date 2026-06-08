@@ -28,11 +28,14 @@ function Finance() {
   // ── Live exchange rate state ──
   // ── AI Macro Market Analysis state ──
   const [marketData, setMarketData] = useState(null);
-  const [marketLoading, setMarketLoading] = useState(true);
+  const [marketLoading, setMarketLoading] = useState(false);
   const [documentIntelligence, setDocumentIntelligence] = useState(null);
-  const [documentIntelligenceLoading, setDocumentIntelligenceLoading] = useState(true);
+  const [documentIntelligenceLoading, setDocumentIntelligenceLoading] = useState(false);
 
   const hasAutonomousSyncedRef = useRef(false);
+  const marketRequestInFlightRef = useRef(false);
+  const documentIntelligenceRequestInFlightRef = useRef(false);
+  const documentIntelligenceDebounceRef = useRef(null);
 
   // ═════════════════════════════════════════════
   // 1. Check onboarding profile for bank connection + autonomous sync
@@ -157,54 +160,67 @@ function Finance() {
   // ═════════════════════════════════════════════
   // 5. Fetch AI Macro Market Analysis
   // ═════════════════════════════════════════════
-  useEffect(() => {
-    const fetchMarketAnalysis = async () => {
-      setMarketLoading(true);
-      try {
-        const token = localStorage.getItem('authToken');
-        const response = await axios.get(`${API_BASE_URL}/api/finance/market-analysis`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (response.data.success) {
-          setMarketData(response.data.data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch market analysis:', err);
-      } finally {
-        setMarketLoading(false);
+  const fetchMarketAnalysis = async () => {
+    if (marketRequestInFlightRef.current) return;
+
+    marketRequestInFlightRef.current = true;
+    setMarketLoading(true);
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await axios.get(`${API_BASE_URL}/api/finance/market-analysis`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.data.success) {
+        setMarketData(response.data.data);
       }
-    };
-    fetchMarketAnalysis();
-  }, []);
+    } catch (err) {
+      console.error('Failed to fetch market analysis:', err);
+    } finally {
+      marketRequestInFlightRef.current = false;
+      setMarketLoading(false);
+    }
+  };
+
+  const fetchDocumentIntelligence = async () => {
+    if (documentIntelligenceRequestInFlightRef.current) return;
+
+    documentIntelligenceRequestInFlightRef.current = true;
+    setDocumentIntelligenceLoading(true);
+    try {
+      const token = localStorage.getItem('authToken');
+      const response = await axios.get(`${API_BASE_URL}/api/finance/document-intelligence`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.data.success) {
+        setDocumentIntelligence(response.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch finance document intelligence:', err);
+      setDocumentIntelligence({
+        status: 'empty',
+        message: 'No financial history available yet.',
+        detail: 'Upload bills, receipts, or financial documents to detect unusual spending patterns.',
+        insights: [],
+        spikes: [],
+        categoryAnalysis: [],
+      });
+    } finally {
+      documentIntelligenceRequestInFlightRef.current = false;
+      setDocumentIntelligenceLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchDocumentIntelligence = async () => {
-      setDocumentIntelligenceLoading(true);
-      try {
-        const token = localStorage.getItem('authToken');
-        const response = await axios.get(`${API_BASE_URL}/api/finance/document-intelligence`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (response.data.success) {
-          setDocumentIntelligence(response.data.data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch finance document intelligence:', err);
-        setDocumentIntelligence({
-          status: 'empty',
-          message: 'No financial history available yet.',
-          detail: 'Upload bills, receipts, or financial documents to detect unusual spending patterns.',
-          insights: [],
-          spikes: [],
-          categoryAnalysis: [],
-        });
-      } finally {
-        setDocumentIntelligenceLoading(false);
-      }
+    const handleUploadHistoryUpdated = () => {
+      window.clearTimeout(documentIntelligenceDebounceRef.current);
+      documentIntelligenceDebounceRef.current = window.setTimeout(fetchDocumentIntelligence, 600);
     };
-    fetchDocumentIntelligence();
-    window.addEventListener('upload-history-updated', fetchDocumentIntelligence);
-    return () => window.removeEventListener('upload-history-updated', fetchDocumentIntelligence);
+
+    window.addEventListener('upload-history-updated', handleUploadHistoryUpdated);
+    return () => {
+      window.clearTimeout(documentIntelligenceDebounceRef.current);
+      window.removeEventListener('upload-history-updated', handleUploadHistoryUpdated);
+    };
   }, []);
 
 
@@ -309,13 +325,27 @@ function Finance() {
       {/* ── Unusual Spending Spike Detector + Macro Market Analysis ── */}
       <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-12">
         <article className={`${glassCardClass} p-6 xl:col-span-8`}>
-          <SpendingSpikeDetector intelligence={documentIntelligence} loading={documentIntelligenceLoading} />
+          <SpendingSpikeDetector
+            intelligence={documentIntelligence}
+            loading={documentIntelligenceLoading}
+            onAnalyze={fetchDocumentIntelligence}
+          />
         </article>
 
         <article className={`${glassCardClass} flex flex-col p-6 xl:col-span-4`}>
-          <div className="mb-5">
+          <div className="mb-5 flex items-start justify-between gap-3">
+            <div>
               <h2 className="text-xl font-semibold text-white">Macro Market Analysis</h2>
               <p className="mt-1 text-sm text-white/80">Global catalysts: Political, Legal, Conflict, & Health updates</p>
+            </div>
+            <button
+              type="button"
+              onClick={fetchMarketAnalysis}
+              disabled={marketLoading}
+              className="shrink-0 rounded-xl border border-[#c8a84b]/30 bg-[#c8a84b]/10 px-3 py-2 text-xs font-bold text-[#f5d76e] transition hover:bg-[#c8a84b]/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {marketLoading ? 'Loading...' : marketData ? 'Refresh' : 'Analyze'}
+            </button>
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto max-h-[280px] pr-1">
             {marketLoading ? (
@@ -329,7 +359,7 @@ function Finance() {
                 <MarketImpactRow key={idx} title={imp.title} detail={imp.detail} type={imp.type} />
               ))
             ) : (
-              <p className="text-sm text-white/50 italic">Geopolitical updates compiling...</p>
+              <p className="text-sm text-white/50 italic">Click Analyze to generate market impact insights.</p>
             )}
           </div>
         </article>
@@ -507,16 +537,30 @@ function buildMonthlyExpenseDetail(financeData) {
   return 'From onboarding monthly expenditure baseline';
 }
 
-function SpendingSpikeDetector({ intelligence, loading }) {
+function SpendingSpikeDetector({ intelligence, loading, onAnalyze }) {
   const status = intelligence?.status;
   const spikes = intelligence?.spikes || [];
   const categoryAnalysis = intelligence?.categoryAnalysis || [];
   const visibleItems = spikes.length ? spikes : categoryAnalysis.filter((item) => item.severity !== 'Normal');
 
+  const headerAction = (
+    <button
+      type="button"
+      onClick={onAnalyze}
+      disabled={loading}
+      className="rounded-xl border border-[#7b61ff]/30 bg-[#7b61ff]/10 px-3 py-2 text-xs font-bold text-[#c084fc] transition hover:bg-[#7b61ff]/20 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {loading ? 'Analyzing...' : intelligence ? 'Re-analyze' : 'Analyze documents'}
+    </button>
+  );
+
   if (loading) {
     return (
       <div className="space-y-4">
-        <PanelTitle title="Unusual Spending Spike Detector" subtitle="Reading uploaded finance documents" />
+        <div className="flex items-start justify-between gap-3">
+          <PanelTitle title="Unusual Spending Spike Detector" subtitle="Reading uploaded finance documents" />
+          {headerAction}
+        </div>
         {[1, 2, 3].map((item) => <div key={item} className="finance-pulse-skeleton h-16 rounded-2xl bg-white/5" />)}
       </div>
     );
@@ -525,7 +569,10 @@ function SpendingSpikeDetector({ intelligence, loading }) {
   if (status === 'empty' || !intelligence) {
     return (
       <div className="space-y-5">
-        <PanelTitle title="Unusual Spending Spike Detector" subtitle="Document-based anomaly detection" badge="Empty State" />
+        <div className="flex items-start justify-between gap-3">
+          <PanelTitle title="Unusual Spending Spike Detector" subtitle="Document-based anomaly detection" badge="Empty State" />
+          {headerAction}
+        </div>
         <EmptyFinanceState title="No financial history available yet." detail="Upload bills, receipts, or financial documents to detect unusual spending patterns." />
       </div>
     );
@@ -534,7 +581,10 @@ function SpendingSpikeDetector({ intelligence, loading }) {
   if (status === 'insufficient') {
     return (
       <div className="space-y-5">
-        <PanelTitle title="Unusual Spending Spike Detector" subtitle={`${intelligence.documentCount || 1} finance document found`} badge="Needs History" />
+        <div className="flex items-start justify-between gap-3">
+          <PanelTitle title="Unusual Spending Spike Detector" subtitle={`${intelligence.documentCount || 1} finance document found`} badge="Needs History" />
+          {headerAction}
+        </div>
         <EmptyFinanceState title="More spending history is needed before unusual spending can be detected." detail="Need at least 2-3 finance records for comparison." />
       </div>
     );
@@ -542,7 +592,10 @@ function SpendingSpikeDetector({ intelligence, loading }) {
 
   return (
     <div className="space-y-5">
-      <PanelTitle title="Unusual Spending Spike Detector" subtitle={`${intelligence.documentCount || 0} uploaded finance documents analyzed`} badge={visibleItems.length ? 'Document Signal' : 'No Spikes'} />
+      <div className="flex items-start justify-between gap-3">
+        <PanelTitle title="Unusual Spending Spike Detector" subtitle={`${intelligence.documentCount || 0} uploaded finance documents analyzed`} badge={visibleItems.length ? 'Document Signal' : 'No Spikes'} />
+        {headerAction}
+      </div>
       {visibleItems.length ? (
         <div className="space-y-4">
           {visibleItems.slice(0, 3).map((item) => (

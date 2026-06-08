@@ -53,7 +53,21 @@ export function DashboardSyncProvider({ children }) {
   useEffect(() => {
     const initialFetchTimer = window.setTimeout(fetchDashboard, 0);
 
-    const handleUpdate = () => {
+    const handleUpdate = (event) => {
+      if (event?.detail?.streak) {
+        setDashboardData((current) => {
+          const next = {
+            ...(current || {}),
+            streak: event.detail.streak,
+            profile: {
+              ...(current?.profile || {}),
+              ...event.detail.streak,
+            },
+          };
+          localStorage.setItem('digitalTwinDashboardData', JSON.stringify(next));
+          return next;
+        });
+      }
       fetchDashboard();
     };
     window.addEventListener('daily-update-completed', handleUpdate);

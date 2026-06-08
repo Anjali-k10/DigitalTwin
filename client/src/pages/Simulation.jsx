@@ -1272,6 +1272,8 @@ function Simulation() {
   const careerIntegrations = useSelector((state) => state.careerIntegrations);
   const dailyUpdate = useSelector((state) => state.dailyUpdate);
   const assistantSimulationApplied = useRef(false);
+  const dailyUpdateFetchRequestedRef = useRef(false);
+  const simulationRequestInFlightRef = useRef(false);
   const [currentValues, setCurrentValues] = useState(buildCurrentValues);
   const [values, setValues] = useState(buildInitialValues);
   const [customFields, setCustomFields] = useState([]);
@@ -1295,6 +1297,7 @@ function Simulation() {
   const [analysis, setAnalysis] = useState(defaultAnalysis);
   const [inputError, setInputError] = useState('');
   const [analysisError, setAnalysisError] = useState('');
+  const [isAiRequestLoading, setIsAiRequestLoading] = useState(false);
   const isLoadingInputs = isDashboardLoading || dailyUpdate.loading || githubStatsLoading || leetcodeStatsLoading || financeLoading;
 
   const authHeaders = useMemo(() => {
@@ -1304,7 +1307,8 @@ function Simulation() {
   const dashboardScores = useMemo(() => deriveDashboardScores(dashboardData), [dashboardData]);
 
   useEffect(() => {
-    if (!dailyUpdate.todayUpdate && !dailyUpdate.loading) {
+    if (!dailyUpdateFetchRequestedRef.current && !dailyUpdate.todayUpdate && !dailyUpdate.loading) {
+      dailyUpdateFetchRequestedRef.current = true;
       dispatch(fetchTodayDailyUpdate());
     }
   }, [dailyUpdate.loading, dailyUpdate.todayUpdate, dispatch]);
@@ -1490,6 +1494,10 @@ function Simulation() {
   };
 
   const startSimulation = useCallback(async (overrides = {}) => {
+    if (simulationRequestInFlightRef.current) return;
+    simulationRequestInFlightRef.current = true;
+    setIsAiRequestLoading(true);
+
     const nextCurrentValues = { ...currentValues, ...(overrides.current || {}) };
     const nextValues = { ...values, ...(overrides.simulated || {}) };
 
@@ -1550,6 +1558,8 @@ function Simulation() {
       window.clearTimeout(timeoutId);
       setCompletedSteps(processingSteps.length);
       setPhase('result');
+      simulationRequestInFlightRef.current = false;
+      setIsAiRequestLoading(false);
     }
   }, [allSimulationFields, authHeaders, currentValues, dailyUpdate, dashboardData, dashboardScores, financeData, values]);
 
@@ -1623,10 +1633,11 @@ function Simulation() {
           <button
             type="button"
             onClick={startSimulation}
-            className="inline-flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#ff7a00] via-[#ff007f] to-[#7b61ff] px-7 py-4 text-sm font-black text-white shadow-[0_20px_50px_-25px_rgba(255,0,127,0.9)] transition hover:-translate-y-0.5"
+            disabled={isAiRequestLoading || isLoadingInputs}
+            className="inline-flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-[#ff7a00] via-[#ff007f] to-[#7b61ff] px-7 py-4 text-sm font-black text-white shadow-[0_20px_50px_-25px_rgba(255,0,127,0.9)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
           >
             <Sparkles className="h-5 w-5" />
-            Start Simulation
+            {isAiRequestLoading ? 'Running Simulation...' : 'Start Simulation'}
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { useDispatch, useSelector } from 'react-redux';
 import { useGamification } from '../context/GamificationContext';
@@ -1236,6 +1236,7 @@ export default function Career() {
   const [debriefText, setDebriefText]       = useState(null);
   const [debriefLoading, setDebriefLoading] = useState(false);
   const [debriefError, setDebriefError]     = useState('');
+  const debriefRequestInFlightRef = useRef(false);
   const [careerActivityCounts, setCareerActivityCounts] = useState({});
   const [professionalGrowthStats, setProfessionalGrowthStats] = useState({
     github: null,
@@ -1356,6 +1357,9 @@ export default function Career() {
   }
 
   async function fetchCareerDebrief() {
+    if (debriefRequestInFlightRef.current || debriefLoading) return;
+
+    debriefRequestInFlightRef.current = true;
     setDebriefLoading(true); setDebriefError(''); setDebriefText(null);
     try {
       const res = await axios.post(`${API}/api/ai/career-debrief`, {
@@ -1371,6 +1375,7 @@ export default function Career() {
     } catch (err) {
       setDebriefError(err.response?.data?.message || 'Could not generate your debrief — try again.');
     } finally {
+      debriefRequestInFlightRef.current = false;
       setDebriefLoading(false);
     }
   }
@@ -1626,7 +1631,8 @@ export default function Career() {
                   <p className="text-[10px] text-white/25 uppercase tracking-widest">
                     Generated from live signals · {new Date().toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'short' })}
                   </p>
-                  <button onClick={fetchCareerDebrief} className="text-xs text-[#7b61ff]/60 hover:text-[#7b61ff] transition-colors">
+                  <button onClick={fetchCareerDebrief} disabled={debriefLoading}
+                    className="text-xs text-[#7b61ff]/60 hover:text-[#7b61ff] transition-colors disabled:cursor-not-allowed disabled:opacity-40">
                     Regenerate ↺
                   </button>
                 </div>

@@ -875,8 +875,54 @@ function LifeBalanceTooltip({ active, payload, data }) {
 
 function DailyCalendarStreak({ insights }) {
   const [now, setNow] = useState(() => new Date());
+  const [liveStreak, setLiveStreak] = useState(null);
+
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
-  const calendar = useMemo(() => buildRitualCalendar(now, insights), [now, insights]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchStreakCalendar = async () => {
+      const token = localStorage.getItem('authToken');
+      if (!token) return;
+
+      try {
+        const response = await axios.get(`${API_BASE_URL}/api/streak/calendar`, {
+          headers: { Authorization: `Bearer ${token}` },
+          params: { _t: Date.now() },
+        });
+        if (!cancelled && response.data?.success) {
+          setLiveStreak(normalizeStreak(response.data.data));
+        }
+      } catch (error) {
+        console.warn('[Dashboard] Failed to load streak calendar:', error.message);
+      }
+    };
+
+    const handleDailyUpdateCompleted = (event) => {
+      if (event.detail?.streak) {
+        setLiveStreak(normalizeStreak(event.detail.streak));
+        return;
+      }
+      fetchStreakCalendar();
+    };
+
+    fetchStreakCalendar();
+    window.addEventListener('daily-update-completed', handleDailyUpdateCompleted);
+    window.addEventListener('dashboard-data-updated', fetchStreakCalendar);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('daily-update-completed', handleDailyUpdateCompleted);
+      window.removeEventListener('dashboard-data-updated', fetchStreakCalendar);
+    };
+  }, []);
+
+  const streakInsights = useMemo(
+    () => liveStreak ? { ...insights, streak: liveStreak } : insights,
+    [insights, liveStreak],
+  );
+  const calendar = useMemo(() => buildRitualCalendar(now, streakInsights), [now, streakInsights]);
 
   return (
     <motion.article whileHover={{ y: -3 }} className="flex flex-col rounded-[1.5rem] border border-white/10 bg-white/[0.02] p-5 backdrop-blur-xl">
