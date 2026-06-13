@@ -51,6 +51,7 @@ export const signup = async (req, res, next) => {
       email: email.toLowerCase(),
       password,
       authProvider: 'local',
+      smokingProfile: defaultSmokingProfile(),
     });
 
     await newUser.save();
@@ -189,7 +190,7 @@ export const getProfile = async (req, res, next) => {
  */
 export const updateProfile = async (req, res, next) => {
   try {
-    const { firstName, lastName, email, bio, phone, dob, links, language, timezone, notifications } = req.body;
+    const { firstName, lastName, email, bio, phone, dob, gender, links, language, timezone, notifications, smokingProfile } = req.body;
 
     const user = await User.findById(req.user.userId);
 
@@ -219,6 +220,7 @@ export const updateProfile = async (req, res, next) => {
     if (bio) user.bio = bio.trim();
     if (phone !== undefined) user.phone = String(phone).trim();
     if (dob !== undefined) user.dob = String(dob).trim();
+    if (gender !== undefined) user.gender = sanitizeGender(gender);
     if (links && typeof links === 'object') {
       user.links = {
         ...user.links,
@@ -228,6 +230,9 @@ export const updateProfile = async (req, res, next) => {
         fitband: sanitizeProfileText(links.fitband ?? user.links?.fitband),
         banking: sanitizeProfileText(links.banking ?? user.links?.banking),
       };
+    }
+    if (smokingProfile && typeof smokingProfile === 'object') {
+      user.smokingProfile = mergeSmokingProfile(user.smokingProfile, smokingProfile);
     }
 
     // Update preferences
@@ -380,6 +385,7 @@ export const googleAuth = async (req, res, next) => {
         firebaseUID: uid,
         authProvider: 'google',
         isVerified: true,
+        smokingProfile: defaultSmokingProfile(),
       });
     }
 
@@ -721,6 +727,11 @@ function sanitizeProfileText(value) {
   return String(value).replace(/[<>]/g, '').trim().slice(0, 300);
 }
 
+function sanitizeGender(value) {
+  const gender = sanitizeProfileText(value).toLowerCase();
+  return ['male', 'female', 'other'].includes(gender) ? gender : null;
+}
+
 function splitDisplayName(displayName) {
   const parts = sanitizeProfileText(displayName).split(/\s+/).filter(Boolean);
   const firstName = parts.shift() || 'Google';
@@ -748,4 +759,33 @@ function isGoogleAccount(user) {
     user?.firebaseUid ||
     user?.firebaseUID
   );
+}
+
+function defaultSmokingProfile() {
+  return {
+    smoker: false,
+    smokingFrequency: null,
+    smokingStartedAt: null,
+    smokingStreak: 0,
+    cigarettesToday: 0,
+  };
+}
+
+function mergeSmokingProfile(current = {}, incoming = {}) {
+  const smoker = Boolean(incoming.smoker);
+  return {
+    smoker,
+    smokingFrequency: smoker ? sanitizeSmokingFrequency(incoming.smokingFrequency || current?.smokingFrequency) : null,
+    smokingStartedAt: smoker ? incoming.smokingStartedAt ?? current?.smokingStartedAt ?? new Date() : null,
+    smokingStreak: Number(incoming.smokingStreak ?? current?.smokingStreak ?? 0),
+    cigarettesToday: Number(incoming.cigarettesToday ?? current?.cigarettesToday ?? 0),
+    cravingsResisted: Number(incoming.cravingsResisted ?? current?.cravingsResisted ?? 0),
+    lastCigarette: incoming.lastCigarette ?? current?.lastCigarette ?? null,
+    lastEvent: sanitizeProfileText(incoming.lastEvent ?? current?.lastEvent ?? ''),
+    lastEventTime: incoming.lastEventTime ?? current?.lastEventTime ?? null,
+  };
+}
+
+function sanitizeSmokingFrequency(value) {
+  return value === 'daily' ? 'daily' : 'sometimes';
 }

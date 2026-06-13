@@ -2,6 +2,7 @@ import DailyUpdate from '../models/DailyUpdate.js';
 import DailyTracking from '../models/DailyTracking.js';
 import OnboardingProfile from '../models/OnboardingProfile.js';
 import SmartGoal from '../models/SmartGoal.js';
+import User from '../models/User.js';
 import { createNotification, resolveNotifications } from '../services/notificationService.js';
 
 export const getTodayDailyUpdate = async (req, res) => {
@@ -33,7 +34,8 @@ export const createDailyUpdate = async (req, res) => {
     });
   }
 
-  const payload = normalizePayload(req.body);
+  const user = await User.findById(userId);
+  const payload = normalizePayload(req.body, user);
   const update = await DailyUpdate.create({ userId, date, ...payload, completed: true });
   const effects = await applyDailyUpdateEffects(userId, date, payload);
   const profile = await OnboardingProfile.findOne({ userId }).sort({ updatedAt: -1 }).lean();
@@ -338,13 +340,15 @@ async function getOrCreateDailyLog(userId, dateString) {
   return dailyLog;
 }
 
-function normalizePayload(body = {}) {
+function normalizePayload(body = {}, user = null) {
+  const isSmoker = user?.smokingProfile?.smoker === true;
   return {
     health: {
       waterIntake: num(body.health?.waterIntake),
       exercised: Boolean(body.health?.exercised),
       ateProperly: Boolean(body.health?.ateProperly),
       sleepHours: num(body.health?.sleepHours),
+      smokedToday: isSmoker ? Boolean(body.health?.smokedToday) : false,
       healthConcern: Boolean(body.health?.healthConcern),
       concernTypes: Array.isArray(body.health?.concernTypes) ? body.health.concernTypes : [],
       concernDescription: String(body.health?.concernDescription || '').trim(),

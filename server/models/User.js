@@ -66,6 +66,11 @@ const userSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other'],
+      default: null,
+    },
     links: {
       linkedin: { type: String, trim: true, default: '' },
       github: { type: String, trim: true, default: '' },
@@ -95,6 +100,21 @@ const userSchema = new mongoose.Schema(
       provider: { type: String, trim: true, default: 'gargi_fitband' },
       integrationLink: { type: String, trim: true, default: '' },
       lastSync: { type: Date, default: null },
+    },
+    smokingProfile: {
+      smoker: { type: Boolean, default: false },
+      smokingFrequency: {
+        type: String,
+        enum: ['sometimes', 'daily', null],
+        default: null,
+      },
+      smokingStartedAt: { type: Date, default: null },
+      smokingStreak: { type: Number, default: 0 },
+      cigarettesToday: { type: Number, default: 0 },
+      cravingsResisted: { type: Number, default: 0 },
+      lastCigarette: { type: Date, default: null },
+      lastEvent: { type: String, trim: true, default: '' },
+      lastEventTime: { type: Date, default: null },
     },
 
     // Subscription & Role
@@ -239,6 +259,7 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
  */
 userSchema.methods.getProfile = function () {
   const user = this.toObject();
+  user.smokingProfile = normalizeSmokingProfile(user.smokingProfile);
   user.passwordSet = Boolean(user.password);
   delete user.password;
   delete user.verificationToken;
@@ -261,3 +282,18 @@ userSchema.index({ isActive: 1 });
 const User = mongoose.model('User', userSchema);
 
 export default User;
+
+function normalizeSmokingProfile(profile = {}) {
+  const smoker = Boolean(profile?.smoker);
+  return {
+    smoker,
+    smokingFrequency: smoker ? profile?.smokingFrequency || 'sometimes' : null,
+    smokingStartedAt: smoker ? profile?.smokingStartedAt || null : null,
+    smokingStreak: Number(profile?.smokingStreak || 0),
+    cigarettesToday: Number(profile?.cigarettesToday || 0),
+    cravingsResisted: Number(profile?.cravingsResisted || 0),
+    lastCigarette: profile?.lastCigarette || null,
+    lastEvent: profile?.lastEvent || '',
+    lastEventTime: profile?.lastEventTime || null,
+  };
+}

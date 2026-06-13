@@ -20,7 +20,7 @@ const authSlice = createSlice({
     },
     loginSuccess(state, action) {
       const { user, token } = action.payload;
-      state.user = user;
+      state.user = normalizeUser(user);
       state.token = token;
       state.isAuthenticated = Boolean(token);
       state.loading = false;
@@ -44,7 +44,7 @@ const authSlice = createSlice({
         state.loading = true;
       })
       .addCase(loginUser.fulfilled, (state, action) => {
-        state.user = action.payload.user;
+        state.user = normalizeUser(action.payload.user);
         state.token = action.payload.token;
         state.isAuthenticated = true;
         state.loading = false;
@@ -59,7 +59,7 @@ const authSlice = createSlice({
         state.loading = true;
       })
       .addCase(loginWithGoogle.fulfilled, (state, action) => {
-        state.user = action.payload.user;
+        state.user = normalizeUser(action.payload.user);
         state.token = action.payload.token;
         state.isAuthenticated = true;
         state.loading = false;
@@ -74,7 +74,7 @@ const authSlice = createSlice({
         state.loading = true;
       })
       .addCase(restoreSession.fulfilled, (state, action) => {
-        state.user = action.payload.user;
+        state.user = normalizeUser(action.payload.user);
         state.token = action.payload.token;
         state.isAuthenticated = true;
         state.loading = false;
@@ -94,8 +94,28 @@ export default authSlice.reducer;
 function readStoredUser() {
   try {
     const stored = localStorage.getItem('user');
-    return stored ? JSON.parse(stored) : null;
+    return stored ? normalizeUser(JSON.parse(stored)) : null;
   } catch {
     return null;
   }
+}
+
+function normalizeUser(user) {
+  if (!user) return null;
+  const profile = user.smokingProfile || {};
+  const smoker = profile.smoker === true;
+  return {
+    ...user,
+    smokingProfile: {
+      smoker,
+      smokingFrequency: smoker ? profile.smokingFrequency || 'sometimes' : null,
+      smokingStartedAt: smoker ? profile.smokingStartedAt || null : null,
+      smokingStreak: Number(profile.smokingStreak || 0),
+      cigarettesToday: Number(profile.cigarettesToday || 0),
+      cravingsResisted: Number(profile.cravingsResisted || 0),
+      lastCigarette: profile.lastCigarette || null,
+      lastEvent: profile.lastEvent || '',
+      lastEventTime: profile.lastEventTime || null,
+    },
+  };
 }

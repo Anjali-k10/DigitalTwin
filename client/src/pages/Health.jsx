@@ -7,6 +7,7 @@ import {
   fetchHealthIntegration,
   saveHealthIntegration,
 } from '../features/healthIntegration/healthIntegrationSlice';
+import { loginSuccess } from '../features/auth/authSlice';
 import {
   Eye, EyeOff, AlertCircle, Baby, Flower2,
   Sparkles, ChevronRight, ChevronLeft, Wifi, WifiOff,
@@ -208,9 +209,8 @@ export default function Health() {
 
   // Smoking tracker
   const [smokingMode, setSmokingMode]       = useState('view');
-  const [smokingEnabled, setSmokingEnabled] = useState(() => localStorage.getItem('ltSmokingEnabled') === 'true');
   const [smokeLogLoading, setSmokeLogLoading] = useState(false);
-  const [smokingData, setSmokingData]       = useState(null);
+  const [startSmokingOpen, setStartSmokingOpen] = useState(false);
 
   const { triggerReward, history = [], unlockedBadges = [], availableBadges = [] } = useGamification();
   const API   = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
@@ -221,9 +221,6 @@ export default function Health() {
     setMounted(true);
     dispatch(fetchHealthIntegration());
     fetchDashProfile();
-
-    const savedSmoke = JSON.parse(localStorage.getItem('ltSmoking') || 'null');
-    if (savedSmoke) setSmokingData(savedSmoke);
 
     fetchWeather();
   }, []);
@@ -448,18 +445,21 @@ export default function Health() {
   async function logSmokingEvent(type) {
     setSmokeLogLoading(true);
     try {
-      const now     = new Date().toISOString();
-      const updated = {
-        ...(smokingData || { history: [], cravingsResisted: 0 }),
+      const now = new Date().toISOString();
+      const nextSmokingProfile = {
+        ...smokingProfile,
+        smoker: true,
+        smokingFrequency: smokingProfile.smokingFrequency || 'sometimes',
+        smokingStartedAt: smokingProfile.smokingStartedAt || now,
         lastEvent: type,
         lastEventTime: now,
-        ...(type === 'smoked'
-          ? { lastCigarette: now, history: [...(smokingData?.history || []), { type, time: now }].slice(-30) }
-          : { cravingsResisted: (smokingData?.cravingsResisted || 0) + 1, history: [...(smokingData?.history || []), { type, time: now }].slice(-30) }),
+        lastCigarette: type === 'smoked' ? now : smokingProfile.lastCigarette || null,
+        cigarettesToday: type === 'smoked' ? Number(smokingProfile.cigarettesToday || 0) + 1 : Number(smokingProfile.cigarettesToday || 0),
+        cravingsResisted: type === 'craving_resisted' ? Number(smokingProfile.cravingsResisted || 0) + 1 : Number(smokingProfile.cravingsResisted || 0),
+        smokingStreak: type === 'smoked' ? 0 : Number(smokingProfile.smokingStreak || 0),
       };
-      localStorage.setItem('ltSmoking', JSON.stringify(updated));
-      setSmokingData(updated);
-      if (type === 'craving_resisted') triggerReward(25, 'Craving Resisted! 💪', '🚭');
+      if (type === 'craving_resisted') triggerReward(25, 'Craving Resisted!', '');
+      await saveSmokingProfile(nextSmokingProfile);
       await axios.post(
         `${API}/api/health-metrics/vitals`,
         { stressLevel: type === 'smoked' ? 7 : 4, mood: type === 'smoked' ? 'stressed' : 'determined', waterLiters: 0 },
@@ -469,18 +469,52 @@ export default function Health() {
     finally { setSmokeLogLoading(false); setSmokingMode('view'); }
   }
 
-  // ── Derived values ──────────────────────────────────────────────────────────
+  async function startSmokingTracking() {
+    setSmokeLogLoading(true);
+    try {
+      const now = new Date().toISOString();
+      await saveSmokingProfile({
+        ...smokingProfile,
+        smoker: true,
+        smokingFrequency: 'sometimes',
+        smokingStartedAt: now,
+        smokingStreak: 0,
+        cigarettesToday: 0,
+      });
+      setStartSmokingOpen(false);
+    } catch (err) {
+      console.error('Start smoking tracking failed', err);
+    } finally {
+      setSmokeLogLoading(false);
+    }
+  }
+
+  async function saveSmokingProfile(nextSmokingProfile) {
+    const response = await axios.put(
+      `${API}/api/auth/profile`,
+      { smokingProfile: nextSmokingProfile },
+      { headers: { Authorization: `Bearer ${token()}` } },
+    );
+    const nextUser = response.data?.data;
+    if (nextUser) {
+      localStorage.setItem('user', JSON.stringify(nextUser));
+      dispatch(loginSuccess({ token: token(), user: nextUser }));
+    }
+  }
   const profile      = dashProfile?.profile  || {};
   const analytics    = dashProfile?.analytics || {};
   const aiInsights   = dashProfile?.aiInsights || [];
   const name         = profile?.githubData?.name || profile?.githubUsername || 'You';
   const sleepGoal    = profile?.sleepHours    || 7;
   const exerciseFreq = profile?.exerciseFrequency || 2;
-  const isSmoker     = profile?.smokingHabit === 'yes' || smokingEnabled;
-  const smokingStreak = computeSmokingStreak(smokingData?.lastCigarette);
+  const smokingProfile = authUser?.smokingProfile || {};
+  const isSmoker     = smokingProfile.smoker === true;
+  const smokingStreak = Number(smokingProfile.smokingStreak ?? computeSmokingStreak(smokingProfile.lastCigarette));
   const burnoutRisk  = analytics?.burnoutRisk   ?? null;
   const wellnessScore = analytics?.wellnessBalance ?? null;
   const wearableReady = wearable && Object.keys(wearable).length > 0 && wearable.steps !== undefined;
+  const resolvedGender = authUser?.gender || dashProfile?.profile?.gender || null;
+  const showFemaleHealth = resolvedGender === 'female';
 
   const metrics = [
     { key:'hr',       label:'Heart Rate', icon:HeartPulseIcon, value:wearable?.avgHeartRate??null,
@@ -694,11 +728,6 @@ export default function Health() {
           <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-white/10 bg-white/2 px-5 py-3">
             <span className="text-[10px] font-bold uppercase tracking-widest text-white/25">Demo controls</span>
             <div className="flex flex-wrap gap-2 ml-2">
-              <button
-                onClick={() => { const next = !smokingEnabled; setSmokingEnabled(next); localStorage.setItem('ltSmokingEnabled', String(next)); }}
-                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-bold transition-all ${smokingEnabled ? 'border-[#f59e0b]/50 bg-[#f59e0b]/15 text-[#f59e0b]' : 'border-white/10 bg-white/5 text-white/35 hover:bg-white/8'}`}>
-                🚬 Quit Companion {smokingEnabled ? 'ON' : 'OFF'}
-              </button>
               <button onClick={fetchWearable} disabled={syncStatus === 'syncing'}
                 className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-white/35 hover:bg-white/8 transition-all disabled:opacity-40">
                 ⌚ Re-sync Mock Data
@@ -804,7 +833,7 @@ export default function Health() {
                   { icon:'💤', label:`${sleepGoal}h sleep`,               pts:'40 XP', sub:'From your onboarding', active: wearableReady && wearable.sleepHours >= sleepGoal },
                   { icon:'❤️', label:'Healthy HR',                         pts:'30 XP', sub:'55–85 bpm at rest',   active: wearableReady && wearable.avgHeartRate >= 55 && wearable.avgHeartRate <= 85 },
                   { icon:'⚡', label:'HRV above 60ms',                     pts:'75 XP', sub:'Deep recovery zone',   active: wearableReady && wearable.hrv > 60 },
-                  ...(isSmoker ? [{ icon:'🚭', label:'Craving resisted', pts:'25 XP', sub:'Quit Companion win', active: (smokingData?.cravingsResisted ?? 0) > 0 }] : []),
+                  ...(isSmoker ? [{ icon:'🚭', label:'Craving resisted', pts:'25 XP', sub:'Quit Companion win', active: Number(smokingProfile.cravingsResisted || 0) > 0 }] : []),
                 ].map(item => (
                   <div key={item.icon} className={`rounded-xl border p-3 text-center transition-all ${item.active ? 'bg-[#10c7a1]/10 border-[#10c7a1]/30' : 'bg-white/4 border-white/5'}`}>
                     <span className="text-2xl">{item.icon}</span>
@@ -872,26 +901,28 @@ export default function Health() {
 
         {/* ── BLOOM COMPANION + DAILY MATRIX ── */}
         <section className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-          <article className="relative flex flex-col rounded-[1.6rem] border border-[#ffb3d1]/20 bg-gradient-to-br from-[#0b0f16]/95 via-[#12080e]/80 to-[#0b0f16]/95 p-6 xl:col-span-6 overflow-hidden min-h-[520px]">
-            <FloralDeco className="pointer-events-none absolute -top-8 -right-8 h-40 w-40 text-[#ff6b9d] opacity-20" />
-            <FloralDeco className="pointer-events-none absolute -bottom-12 -left-10 h-48 w-48 text-[#c084fc] opacity-10" />
-            <SmallFlower className="pointer-events-none absolute top-1/2 right-4 h-16 w-16 text-[#ffd166] opacity-15" />
-            <SmallFlower className="pointer-events-none absolute top-20 left-6 h-12 w-12 text-[#ff6b9d] opacity-10" />
-            <button onClick={() => setBlurred(b => !b)}
-              className="absolute top-5 right-5 z-50 h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all"
-              title={blurred ? 'Show' : 'Hide for privacy'}>
-              {blurred ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-            <div className={`relative z-10 flex flex-col h-full transition-all duration-500 ${blurred ? 'blur-md opacity-30 select-none pointer-events-none' : ''}`}>
-              {womenMode === 'period_setup'   && <PeriodSetup step={setupStep} setStep={setSetupStep} setup={periodSetup} setSetup={setPeriodSetup} onComplete={savePeriod} />}
-              {womenMode === 'period'         && phase && <PeriodTracker phase={phase} setup={periodSetup} symptoms={symptoms} toggleSym={s => setSymptoms(p => p.includes(s) ? p.filter(x=>x!==s) : [...p,s])} onMissed={() => setWomenMode('troubleshoot')} onPreg={() => setWomenMode('preg_setup')} onReset={resetWomen} wearable={wearableReady ? wearable : null} onRestartCycle={handleRestartPeriod} />}
-              {womenMode === 'troubleshoot'   && <TroubleshootPanel condition={periodSetup.condition} wearable={wearableReady ? wearable : null} onBack={() => setWomenMode('period')} onConfirm={() => setWomenMode('preg_setup')} />}
-              {womenMode === 'preg_setup'     && <PregSetup weeks={pregWeeks} setWeeks={setPregWeeks} due={pregDue} setDue={setPregDue} onSave={savePreg} onBack={() => setWomenMode('period')} />}
-              {womenMode === 'preg_dashboard' && <PregDashboard weeks={parseInt(pregWeeks)||6} due={pregDue} weather={weather} onReset={resetWomen} onBack={() => setWomenMode('period')} />}
-            </div>
-          </article>
+          {showFemaleHealth && (
+            <article className="relative flex flex-col rounded-[1.6rem] border border-[#ffb3d1]/20 bg-gradient-to-br from-[#0b0f16]/95 via-[#12080e]/80 to-[#0b0f16]/95 p-6 xl:col-span-6 overflow-hidden min-h-[520px]">
+              <FloralDeco className="pointer-events-none absolute -top-8 -right-8 h-40 w-40 text-[#ff6b9d] opacity-20" />
+              <FloralDeco className="pointer-events-none absolute -bottom-12 -left-10 h-48 w-48 text-[#c084fc] opacity-10" />
+              <SmallFlower className="pointer-events-none absolute top-1/2 right-4 h-16 w-16 text-[#ffd166] opacity-15" />
+              <SmallFlower className="pointer-events-none absolute top-20 left-6 h-12 w-12 text-[#ff6b9d] opacity-10" />
+              <button onClick={() => setBlurred(b => !b)}
+                className="absolute top-5 right-5 z-50 h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-all"
+                title={blurred ? 'Show' : 'Hide for privacy'}>
+                {blurred ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+              <div className={`relative z-10 flex flex-col h-full transition-all duration-500 ${blurred ? 'blur-md opacity-30 select-none pointer-events-none' : ''}`}>
+                {womenMode === 'period_setup'   && <PeriodSetup step={setupStep} setStep={setSetupStep} setup={periodSetup} setSetup={setPeriodSetup} onComplete={savePeriod} />}
+                {womenMode === 'period'         && phase && <PeriodTracker phase={phase} setup={periodSetup} symptoms={symptoms} toggleSym={s => setSymptoms(p => p.includes(s) ? p.filter(x=>x!==s) : [...p,s])} onMissed={() => setWomenMode('troubleshoot')} onPreg={() => setWomenMode('preg_setup')} onReset={resetWomen} wearable={wearableReady ? wearable : null} onRestartCycle={handleRestartPeriod} />}
+                {womenMode === 'troubleshoot'   && <TroubleshootPanel condition={periodSetup.condition} wearable={wearableReady ? wearable : null} onBack={() => setWomenMode('period')} onConfirm={() => setWomenMode('preg_setup')} />}
+                {womenMode === 'preg_setup'     && <PregSetup weeks={pregWeeks} setWeeks={setPregWeeks} due={pregDue} setDue={setPregDue} onSave={savePreg} onBack={() => setWomenMode('period')} />}
+                {womenMode === 'preg_dashboard' && <PregDashboard weeks={parseInt(pregWeeks)||6} due={pregDue} weather={weather} onReset={resetWomen} onBack={() => setWomenMode('period')} />}
+              </div>
+            </article>
+          )}
 
-          <article className={`${iCard} p-6 xl:col-span-6 flex flex-col`}>
+          <article className={`${iCard} p-6 ${showFemaleHealth ? 'xl:col-span-6' : 'xl:col-span-12'} flex flex-col`}>
             <div className="mb-5 border-b border-white/10 pb-4">
               <h2 className="text-2xl font-bold tracking-tight text-white">Daily Optimization Matrix</h2>
               <p className="mt-1 text-sm text-white/50">
@@ -969,8 +1000,7 @@ export default function Health() {
         </section>
 
         {/* ── SMOKING TRACKER ── */}
-        {isSmoker && (
-          <section>
+        <section>
             <article className={`${card} border-[#f59e0b]/20 bg-gradient-to-br from-[#1a1208]/95 to-[#0b0f16]/95 p-6`}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-white/5 pb-4">
                 <div className="flex items-center gap-3">
@@ -982,14 +1012,25 @@ export default function Health() {
                     <p className="text-sm text-white/45">Your personal tracker for breaking the habit — one day at a time.</p>
                   </div>
                 </div>
-                {smokingMode === 'view' && (
+                {isSmoker && smokingMode === 'view' && (
                   <button onClick={() => setSmokingMode('log')}
                     className="rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/10 px-4 py-2 text-sm font-bold text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-all">
                     Log Now
                   </button>
                 )}
+                {!isSmoker && (
+                  <button onClick={() => setStartSmokingOpen(true)}
+                    className="rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b]/10 px-4 py-2 text-sm font-bold text-[#f59e0b] hover:bg-[#f59e0b]/20 transition-all">
+                    Start Smoking
+                  </button>
+                )}
               </div>
-              {smokingMode === 'log' ? (
+              {!isSmoker ? (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 text-white/60">
+                  <p className="text-sm font-bold text-white">Smoking Tracker</p>
+                  <p className="mt-2 text-sm">Currently unavailable because you indicated that you do not smoke.</p>
+                </div>
+              ) : smokingMode === 'log' ? (
                 <div className="flex flex-col items-center gap-5 py-4">
                   <p className="text-base font-semibold text-white/80 text-center">What happened just now?</p>
                   <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
@@ -1011,7 +1052,7 @@ export default function Health() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div className="rounded-2xl border border-[#f59e0b]/20 bg-[#f59e0b]/8 p-5 flex flex-col items-center justify-center text-center">
-                    {smokingData?.lastCigarette ? (
+                    {smokingProfile.lastCigarette ? (
                       <>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-[#f59e0b]/60 mb-2">Smoke-free streak</p>
                         <p className="text-5xl font-black text-white">{smokingStreak}</p>
@@ -1057,9 +1098,9 @@ export default function Health() {
                          : `Your Digital Twin already knows you smoke — every smoke-free hour matters.`}
                       </p>
                     )}
-                    {(smokingData?.cravingsResisted ?? 0) > 0 && (
+                    {Number(smokingProfile.cravingsResisted || 0) > 0 && (
                       <p className="mt-3 text-xs text-[#a78bfa] font-semibold">
-                        🏆 {smokingData.cravingsResisted} {smokingData.cravingsResisted === 1 ? 'craving' : 'cravings'} resisted total
+                        🏆 {smokingProfile.cravingsResisted} {smokingProfile.cravingsResisted === 1 ? 'craving' : 'cravings'} resisted total
                       </p>
                     )}
                   </div>
@@ -1067,9 +1108,32 @@ export default function Health() {
               )}
             </article>
           </section>
-        )}
 
         {/* ── CROSS INSIGHTS + RECOVERY TRAJECTORY ── */}
+        {startSmokingOpen && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4">
+            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0b0f16] p-6 shadow-[0_24px_70px_rgba(0,0,0,0.55)]">
+              <h3 className="text-xl font-bold text-white">Do you want to start tracking smoking habits?</h3>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setStartSmokingOpen(false)}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white/60 hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={startSmokingTracking}
+                  disabled={smokeLogLoading}
+                  className="rounded-xl border border-[#f59e0b]/30 bg-[#f59e0b] px-4 py-2 text-sm font-bold text-[#1a1208] hover:bg-[#fbbf24] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Start Tracking
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <section className="grid grid-cols-1 gap-6 xl:grid-cols-12">
           <article className={`${iCard} p-6 xl:col-span-5`}>
             <div className="mb-5 flex items-center justify-between border-b border-[#d8e5ea] pb-4">
@@ -1622,5 +1686,9 @@ function AutoIcon({className}){return <IB className={className}><path d="m12 3 1
 function FemaleIcon({className}){return <IB className={className}><path d="M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10ZM12 13v8M8.5 17h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></IB>;}
 function SparkIcon({className}){return <IB className={className}><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></IB>;}
 function TrophyIcon({className}){return <IB className={className}><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22M18 2H6v7a6 6 0 0 0 12 0V2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></IB>;}
+
+
+
+
 
 
