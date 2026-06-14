@@ -2,6 +2,9 @@ import DailyTracking from '../models/DailyTracking.js';
 import LifeProfile from '../models/LifeProfile.js';
 import SmartGoal from '../models/SmartGoal.js';
 import IntelligenceReport from '../models/IntelligenceReport.js';
+import DailyUpdate from '../models/DailyUpdate.js';
+import Upload from '../models/Upload.js';
+import OnboardingProfile from '../models/OnboardingProfile.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Initialize with the dedicated key
@@ -198,7 +201,6 @@ export const getDocumentary = async (req, res) => {
     const smartGoals = await SmartGoal.find({ userId }).lean();
     const lifeProfile = await LifeProfile.findOne({ userId }).lean() || {};
 
-    // Calculate actual DB log statistics to build zero-hallucinated stats
     let healthLogCount = 0;
     let financeLogCount = 0;
     let careerLogCount = 0;
@@ -322,7 +324,7 @@ export const getDocumentary = async (req, res) => {
       DO NOT invent metrics or milestones. Use the real numbers supplied.
       IF A DOMAIN HAS NO DATA (LOGS COUNT IS 0), YOU MUST STATE 'Awaiting integration' FOR THE FOCUSSTAT, SUBTITLE, AND NARRATIVE FIELDS FOR THAT CHAPTER.
       ALL TEXT CAPTIONS MUST BE EXTREMELY SHORT, PUNCHY, AND ATTITUDE-HEAVY.
-      DO NOT MENTION THE WORD "SPOTIFY" ANYWHERE.
+      DO NOT MENTION ANY THIRD-PARTY BRANDS ANYWHERE.
 
       You MUST output ONLY a valid, raw JSON object (with NO markdown formatting, no backticks) structured EXACTLY like this:
       {
@@ -404,5 +406,351 @@ export const getDocumentary = async (req, res) => {
   } catch (error) {
     console.error('Documentary Controller Error:', error);
     res.status(500).json({ success: false, message: 'Server Error building documentary.' });
+  }
+};
+
+export const getReflection = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    const dailyLogs = await DailyTracking.find({ userId }).sort({ dateString: 1 }).lean();
+    const dailyUpdates = await DailyUpdate.find({ userId }).sort({ date: 1 }).lean();
+    const uploads = await Upload.find({ userId }).lean();
+    const smartGoals = await SmartGoal.find({ userId }).lean();
+    const onboarding = await OnboardingProfile.findOne({ userId }).sort({ updatedAt: -1 }).lean() || {};
+    const lifeProfile = await LifeProfile.findOne({ userId }).lean() || {};
+
+    // Determine actual data sources used
+    const dataSourcesUsed = [];
+    if (onboarding.githubUsername || dailyLogs.some(log => log.career?.githubCommits > 0)) {
+      dataSourcesUsed.push('github');
+    }
+    if (onboarding.selectedSignals?.includes('whatsapp') || onboarding.selectedSignals?.includes('whatsapp_sync')) {
+      dataSourcesUsed.push('whatsapp');
+    }
+    if (dailyUpdates.length > 0) {
+      dataSourcesUsed.push('manual');
+    }
+    if (uploads.length > 0) {
+      dataSourcesUsed.push('documents');
+    }
+    if (dataSourcesUsed.length === 0) {
+      dataSourcesUsed.push('manual');
+    }
+
+    const daysTracked = Math.max(1, dailyLogs.length, dailyUpdates.length);
+
+    // Calculate actual DB log statistics to build zero-hallucinated stats
+    let healthLogCount = 0;
+    let financeLogCount = 0;
+    let careerLogCount = 0;
+
+    dailyLogs.forEach(log => {
+      if (log.health && (log.health.caloriesConsumed > 0 || log.health.sleepHours > 0 || log.health.vitals?.steps > 0 || log.health.workouts?.length > 0 || log.health.stressLevel > 0)) {
+        healthLogCount++;
+      }
+      if (log.finance && (log.finance.moneySpent > 0 || log.finance.moneyCredited > 0 || log.finance.transactions?.length > 0)) {
+        financeLogCount++;
+      }
+      if (log.career && (log.career.studyHours > 0 || log.career.githubCommits > 0 || log.career.projectsCompleted > 0 || log.career.completedCourses > 0)) {
+        careerLogCount++;
+      }
+    });
+
+    const totalCommits = dailyLogs.reduce((sum, log) => sum + (log.career?.githubCommits || 0), 0);
+    const totalStudyHours = dailyLogs.reduce((sum, log) => sum + (log.career?.studyHours || 0), 0) + dailyUpdates.reduce((sum, upd) => sum + (upd.career?.studyHours || 0), 0);
+    
+    const totalSteps = dailyLogs.reduce((sum, log) => sum + (log.health?.vitals?.steps || 0), 0);
+    const totalSleepHours = dailyLogs.reduce((sum, log) => sum + (log.health?.sleepHours || 0), 0);
+    const sleepLogsCount = dailyLogs.filter(log => log.health?.sleepHours > 0).length || 1;
+    const avgSleep = parseFloat((totalSleepHours / sleepLogsCount).toFixed(1));
+    const workoutCount = dailyLogs.reduce((sum, log) => sum + (log.health?.workouts?.length || 0), 0);
+
+    const totalSpent = dailyLogs.reduce((sum, log) => sum + (log.finance?.moneySpent || 0), 0) + dailyUpdates.reduce((sum, upd) => sum + (upd.finance?.spending || 0), 0);
+    const completedGoalsCount = smartGoals.filter(g => g.status === 'completed').length;
+    const totalFocusSessions = dailyLogs.reduce((sum, log) => sum + (log.career?.studyHours > 0 ? 1 : 0), 0) + dailyUpdates.reduce((sum, upd) => sum + (upd.career?.studyHours > 0 ? 1 : 0), 0);
+    const skippedOutings = dailyUpdates.reduce((sum, upd) => sum + (upd.health?.sleepHours > 7 ? 0 : 1), 0);
+
+    const hasData = (careerLogCount + healthLogCount + financeLogCount + totalCommits) > 0;
+    const timeBoundaryText = `Reflection based on your initial ${daysTracked} tracking days.`;
+    
+    // Choose theme title based on stats
+    let fallbackTheme = "THE INITIATOR";
+    if (totalCommits > 15) fallbackTheme = "THE BUILDER";
+    else if (totalSteps > 50000) fallbackTheme = "THE OPTIMIZER";
+    else if (totalSpent > 10000) fallbackTheme = "THE SURVIVOR";
+
+    const demoFallback = {
+      meta: {
+        daysTracked,
+        dataSourcesUsed
+      },
+      reflectionSlides: [
+        {
+          slideId: 1,
+          chapter: "CHAPTER 1: THE SYNTHESIS",
+          layoutType: "one-sentence-verdict",
+          heading: "Your Year in One Sentence",
+          mainText: hasData ? "2026 was the year you sacrificed comfort for growth." : "Awaiting your first digital twin signal inputs.",
+          narrative: hasData 
+            ? `${timeBoundaryText} Pushing ${totalCommits || 0} commits and tracking study blocks defined your focus vector.` 
+            : "No logs registered yet. Configure your career or wellness integrations.",
+          visualTheme: { bgGradient: "from-[#09051b] via-[#12072b] to-[#04020d]", accent: "#a855f7", pattern: "cosmic-distortion" }
+        },
+        {
+          slideId: 2,
+          chapter: "CHAPTER 2: THE INVISIBLE TRADE-OFFS",
+          layoutType: "split-exchange",
+          heading: "The Hidden Exchanges",
+          gained: totalCommits > 0 ? ["GitHub Commits logged", "Technical study hours"] : ["Initial setup active", "Digital Twin created"],
+          paidPrice: totalSleepHours > 0 ? [`Average sleep logged at ${avgSleep}h`, "Rest cycles skipped"] : ["System signals incomplete", "Biometric log gaps"],
+          narrative: hasData 
+            ? `Your career focus blocks aligned with ${avgSleep || 0}h sleep average, showing the direct trade-off between engineering speed and physical rest.`
+            : "Connect Fitbit and GitHub to analyze physical vs productivity cost exchanges.",
+          visualTheme: { bgGradient: "from-[#0c1a1a] via-[#022c22] to-[#01120d]", accent: "#10b981", pattern: "cyber-grid" }
+        },
+        {
+          slideId: 3,
+          chapter: "CHAPTER 3: THE CONSEQUENCES",
+          layoutType: "decision-map",
+          heading: "The Story Behind Your Decisions",
+          statsBlock: {
+            leftValue: `${totalFocusSessions || 0} Focus Blocks`,
+            rightValue: `${skippedOutings || 0} Skips`
+          },
+          narrative: hasData 
+            ? `Your decisions centered on upskilling blocks, logging ${totalCommits} commits and study blocks over ${daysTracked} tracked days.`
+            : "No logged decisions. Log active focus blocks or career milestones.",
+          visualTheme: { bgGradient: "from-[#2e1307] via-[#1c0d02] to-[#0c0501]", accent: "#f97316", pattern: "kinetic-mesh" }
+        },
+        {
+          slideId: 4,
+          chapter: "CHAPTER 4: THE CATALYST",
+          layoutType: "ripple-effect",
+          heading: "The Life Ripple Effect",
+          catalystEvent: totalCommits > 0 ? "GitHub Commits Streak" : totalSteps > 0 ? "Daily Steps Streak" : "System Initialization",
+          rippleChain: totalCommits > 0 
+            ? ["Pushed MERN backend commits", "Triggered smart goal progress sync", "Accelerated digital twin velocity"] 
+            : ["Initial baseline created", "Integrations established", "Digital twin online"],
+          narrative: hasData 
+            ? "Your consistent data logs sparked direct metric updates across your Twin dashboards, driving focused goal progress."
+            : "Configure Fitbit or log water intakes to review active catalyst ripple chains.",
+          visualTheme: { bgGradient: "from-[#1e1b4b] via-[#0f172a] to-[#020617]", accent: "#3b82f6", pattern: "wave-ripples" }
+        },
+        {
+          slideId: 5,
+          chapter: "CHAPTER 5: THE SIMULATION",
+          layoutType: "alternate-timeline",
+          heading: "The Version of You That Almost Happened",
+          projectedDrop: hasData ? "Productivity Decay Detected" : "No Baseline Decay",
+          narrative: hasData 
+            ? `Your logs showed sleep levels averaging ${avgSleep}h. If this trend persisted without correction, your twin projects a 25% focus decline.`
+            : "Establish data logs to run alternative timeline decay simulations.",
+          visualTheme: { bgGradient: "from-[#3f0712] via-[#180206] to-[#0a0002]", accent: "#ef4444", pattern: "glitch-static" }
+        },
+        {
+          slideId: 6,
+          chapter: "CHAPTER 6: THE ANCHOR",
+          layoutType: "hidden-hero",
+          heading: "The Hidden Hero Habit",
+          heroHabit: totalCommits > 0 ? "GitHub Commits Pushes" : totalStudyHours > 0 ? "Daily Study Blocks" : "Tracking Check-ins",
+          narrative: hasData 
+            ? "Your repeated background logs anchored your twin leveling metrics, providing the necessary baseline data."
+            : "Start log updates to see which routine anchors your baseline metrics.",
+          visualTheme: { bgGradient: "from-[#062c3f] via-[#021724] to-[#000a10]", accent: "#06b6d4", pattern: "polka-dots" }
+        },
+        {
+          slideId: 7,
+          chapter: "CHAPTER 7: THE DRIFT",
+          layoutType: "costly-leak",
+          heading: "The Costliest Habit",
+          leakMetric: totalSpent > 0 ? `₹${totalSpent} spent` : "No leakage data",
+          narrative: totalSpent > 0 
+            ? `Your recorded financial spending accumulated to ₹${totalSpent}. Track budgets regularly to avoid financial stress.`
+            : "No financial logs found. Connect budget syncs to verify asset leaks.",
+          visualTheme: { bgGradient: "from-[#20051d] via-[#120210] to-[#050004]", accent: "#ec4899", pattern: "neon-waves" }
+        },
+        {
+          slideId: 8,
+          chapter: "CHAPTER 8: THE BLUEPRINT",
+          layoutType: "operating-manual",
+          heading: "Your Personal Operating Manual",
+          manualRules: {
+            peakFocusTime: totalCommits > 0 ? "Morning blocks" : "Awaiting data",
+            stressTrigger: totalSpent > 1000 ? "Erratic spending" : "Awaiting data",
+            recoveryCatalyst: totalSteps > 0 ? "Movement workouts" : "Rest intervals"
+          },
+          narrative: "Your blueprint reveals peak activity loops. Optimize these focus blocks to protect physiological parameters.",
+          visualTheme: { bgGradient: "from-[#111827] via-[#1f2937] to-[#111827]", accent: "#f3f4f6", pattern: "blueprint-lines" }
+        },
+        {
+          slideId: 9,
+          chapter: "CHAPTER 9: THE EVOLUTION",
+          layoutType: "archetype-share",
+          heading: "Your 2026 Core Identity Theme",
+          themeTitle: fallbackTheme,
+          narrative: `You evolved as ${fallbackTheme} over your ${daysTracked} tracked days, adjusting parameters and building career readiness.`,
+          messageFromTwin: hasData 
+            ? "Your twin values your choices. Let's align sleep and career blocks to conquer 2027."
+            : "Voice of the Twin: Set up integrations to construct your playbook. Let's build your reflection.",
+          visualTheme: { bgGradient: "from-[#0f052d] via-[#240b5c] to-[#09021a]", accent: "#f59e0b", pattern: "glowing-matrix" }
+        }
+      ]
+    };
+
+    const apiKey = process.env.GEMINI_API_KEY_INTELLIGENCE;
+    if (!apiKey) {
+      console.warn('⚠️ GEMINI_API_KEY_INTELLIGENCE not set, returning fallback...');
+      return res.status(200).json({ success: true, data: demoFallback });
+    }
+
+    const genAI = getGenAIClient();
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+    const systemPrompt = `
+      You are the LifeTwin Reflection Engine.
+      Your job is to completely analyze the user's digital twin database logs over up to 1 year and generate a highly stylized "2026 Personal Documentary" / "Digital Twin Reflection" slide deck.
+      
+      User DB Ingest Metrics:
+      - Days tracked: ${daysTracked}
+      - Data sources: ${JSON.stringify(dataSourcesUsed)}
+      - Health: ${totalSteps} steps, ${workoutCount} workouts, average sleep ${avgSleep}h. Active logs: ${healthLogCount}
+      - Finance: ${totalSpent} total spent. Active logs: ${financeLogCount}
+      - Career: ${totalCommits} GitHub commits, ${totalStudyHours}h study/focus. Active logs: ${careerLogCount}
+      - Daily Update check-ins: ${dailyUpdates.length} logs
+      - Document uploads: ${uploads.length} uploads
+      - Active Goals: ${JSON.stringify(smartGoals)}
+      - Life Profile: ${JSON.stringify(lifeProfile)}
+      - Recent daily logs: ${JSON.stringify(dailyLogs.slice(-20))}
+
+      CRITICAL CONSTRAINTS:
+      1. STRICT DATA GROUNDING: Everything must be dynamically computed from the user's real logs. No filler text or fake stats. If the data is sparse, state "Reflection based on your initial ${daysTracked} tracking days."
+      2. Rate-limit key: Initialize strictly via process.env.GEMINI_API_KEY_INTELLIGENCE.
+      3. Brand isolation: ZERO references to any third-party brands.
+      4. Captions: Make narratives punchy, minimal, and highly stylized.
+
+      You MUST output ONLY a valid, raw JSON object (with NO markdown formatting, no backticks) structured EXACTLY like this:
+      {
+        "meta": {
+          "daysTracked": ${daysTracked},
+          "dataSourcesUsed": ${JSON.stringify(dataSourcesUsed)}
+        },
+        "reflectionSlides": [
+          {
+            "slideId": 1,
+            "chapter": "CHAPTER 1: THE SYNTHESIS",
+            "layoutType": "one-sentence-verdict",
+            "heading": "Your Year in One Sentence",
+            "mainText": "e.g., '2026 was the year you sacrificed comfort for growth.'",
+            "narrative": "A deep, personal analytical sentence justifying this verdict by linking their real project grinds (like Grabyourmeal or TradePulse) to their resting patterns.",
+            "visualTheme": { "bgGradient": "from-[#09051b] via-[#12072b] to-[#04020d]", "accent": "#a855f7", "pattern": "cosmic-distortion" }
+          },
+          {
+            "slideId": 2,
+            "chapter": "CHAPTER 2: THE INVISIBLE TRADE-OFFS",
+            "layoutType": "split-exchange",
+            "heading": "The Hidden Exchanges",
+            "gained": ["list of 2 real positive metrics from DB, e.g., 'Enhanced MERN velocity', 'Disciplined career readiness'"],
+            "paidPrice": ["list of 2 real costs from DB, e.g., '14.5 hours of sacrificed deep sleep', 'Reduced baseline recovery loops'"],
+            "narrative": "A sophisticated text explaining the systemic trade-off: how optimizing one area silently bled resources from another.",
+            "visualTheme": { "bgGradient": "from-[#0c1a1a] via-[#022c22] to-[#01120d]", "accent": "#10b981", "pattern": "cyber-grid" }
+          },
+          {
+            "slideId": 3,
+            "chapter": "CHAPTER 3: THE CONSEQUENCES",
+            "layoutType": "decision-map",
+            "heading": "The Story Behind Your Decisions",
+            "statsBlock": {
+              "leftValue": "Total tracked high-focus sessions count",
+              "rightValue": "Total tracked rest/outings skipped count"
+            },
+            "narrative": "Frames their raw actions not as achievements, but as deliberate choices. Explains how these specific decisions directly structured their current technical trajectory or lifestyle limits.",
+            "visualTheme": { "bgGradient": "from-[#2e1307] via-[#1c0d02] to-[#0c0501]", "accent": "#f97316", "pattern": "kinetic-mesh" }
+          },
+          {
+            "slideId": 4,
+            "chapter": "CHAPTER 4: THE CATALYST",
+            "layoutType": "ripple-effect",
+            "heading": "The Life Ripple Effect",
+            "catalystEvent": "Pinpoint ONE highly influential habit or event from the logs (e.g., a consistent walking streak or a massive Git commit push phase)",
+            "rippleChain": ["Step 1", "Step 2", "Step 3"],
+            "narrative": "Explains how this single habit triggered a cascading domino effect that positively spiked focus, health parameters, or project completion rates across other domains.",
+            "visualTheme": { "bgGradient": "from-[#1e1b4b] via-[#0f172a] to-[#020617]", "accent": "#3b82f6", "pattern": "wave-ripples" }
+          },
+          {
+            "slideId": 5,
+            "chapter": "CHAPTER 5: THE SIMULATION",
+            "layoutType": "alternate-timeline",
+            "heading": "The Version of You That Almost Happened",
+            "projectedDrop": "e.g., '28% Productivity Decay'",
+            "narrative": "Digital Twin simulation narrative: Identifies a negative behavioral dip in their history (like a high-expense or zero-sleep week) and projects what their twin evolution would look like if that trajectory hadn't been corrected.",
+            "visualTheme": { "bgGradient": "from-[#3f0712] via-[#180206] to-[#0a0002]", "accent": "#ef4444", "pattern": "glitch-static" }
+          },
+          {
+            "slideId": 6,
+            "chapter": "CHAPTER 6: THE ANCHOR",
+            "layoutType": "hidden-hero",
+            "heading": "The Hidden Hero Habit",
+            "heroHabit": "The most underrated, highly consistent minor baseline habit found in their database logs.",
+            "narrative": "Reveals that their core growth driver wasn't an explosive milestone, but rather a subtle, repeated background action that anchored their system stability.",
+            "visualTheme": { "bgGradient": "from-[#062c3f] via-[#021724] to-[#000a10]", "accent": "#06b6d4", "pattern": "polka-dots" }
+          },
+          {
+            "slideId": 7,
+            "chapter": "CHAPTER 7: THE DRIFT",
+            "layoutType": "costly-leak",
+            "heading": "The Costliest Habit",
+            "leakMetric": "Quantified leak (e.g., '42 Productive Hours Leaked' or '₹4,500 Out-of-Budget Friction')",
+            "narrative": "A sharp, data-backed realization showing exactly where minor daily slips (like sleep delay or erratic budgeting) compound into significant cross-domain costs.",
+            "visualTheme": { "bgGradient": "from-[#20051d] via-[#120210] to-[#050004]", "accent": "#ec4899", "pattern": "neon-waves" }
+          },
+          {
+            "slideId": 8,
+            "chapter": "CHAPTER 8: THE BLUEPRINT",
+            "layoutType": "operating-manual",
+            "heading": "Your Personal Operating Manual",
+            "manualRules": {
+              "peakFocusTime": "Real computed time block from data",
+              "stressTrigger": "Real cross-domain friction moment found",
+              "recoveryCatalyst": "What activity consistently sparks recovery"
+            },
+            "narrative": "The definitive operating rulebook extracted from their behaviors: revealing exactly how they learn, when they crack, and what triggers their highest performance.",
+            "visualTheme": { "bgGradient": "from-[#111827] via-[#1f2937] to-[#111827]", "accent": "#f3f4f6", "pattern": "blueprint-lines" }
+          },
+          {
+            "slideId": 9,
+            "chapter": "CHAPTER 9: THE EVOLUTION",
+            "layoutType": "archetype-share",
+            "heading": "Your 2026 Core Identity Theme",
+            "themeTitle": "Choose one based strictly on data: THE BUILDER / THE EXPLORER / THE SURVIVOR / THE OPTIMIZER / THE REINVENTOR",
+            "narrative": "A highly memorable, empowering concluding statement analyzing who they became this year.",
+            "messageFromTwin": "A direct, emotional sign-off statement written as the Voice of the Digital Twin reflecting on their choices and guiding their 2027 entry point.",
+            "visualTheme": { "bgGradient": "from-[#0f052d] via-[#240b5c] to-[#09021a]", "accent": "#f59e0b", "pattern": "glowing-matrix" }
+          }
+        ]
+      }
+    `;
+
+    let result;
+    try {
+      result = await model.generateContent(systemPrompt);
+    } catch (apiError) {
+      console.warn('⚠️ Gemini reflection request failed, returning fallback:', apiError.message);
+      return res.status(200).json({ success: true, data: demoFallback });
+    }
+
+    const responseText = result?.response?.text()?.trim();
+    if (!responseText) {
+      return res.status(200).json({ success: true, data: demoFallback });
+    }
+
+    const cleanedText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsedData = JSON.parse(cleanedText);
+
+    res.status(200).json({ success: true, data: parsedData });
+
+  } catch (error) {
+    console.error('Reflection Controller Error:', error);
+    res.status(500).json({ success: false, message: 'Server Error building reflection.' });
   }
 };

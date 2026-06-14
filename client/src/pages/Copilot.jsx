@@ -6,6 +6,7 @@ import {
   AlertTriangle, Zap, X, User, Bot, ChevronRight, Target, Send,
   RefreshCw, Paperclip, FileText, Activity, DollarSign
 } from 'lucide-react';
+import LiveBiometricScanner from '../components/LiveBiometricScanner';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
@@ -125,6 +126,7 @@ function OracleResponse({ data }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Copilot() {
+  const [view, setView]                           = useState('scanner');
   const [chatFile, setChatFile]                   = useState(null);
   const [chatFilePreview, setChatFilePreview]     = useState(null);
   const [savedGoalUpdate, setSavedGoalUpdate]     = useState(null); // goal auto-updated state
@@ -354,6 +356,19 @@ export default function Copilot() {
     return FOLLOW_UP_CHIPS[detected] || FOLLOW_UP_CHIPS.general;
   };
 
+  const handleAskCopilotFromScan = (scanResult) => {
+    setView('chat');
+    const { metrics, mood } = scanResult;
+    const initialPrompt = `Analyze my latest biometric scan. My metrics are:
+- Stress: ${metrics.stress}%
+- Fatigue: ${metrics.fatigue}%
+- Energy: ${metrics.energy}%
+- Tension: ${metrics.tension}%
+Overall mood diagnosis: ${mood}.
+Provide a personalized grounding protocol, empathetic advice, and immediate actions for my health, finance, and career domains.`;
+    handleAskOracle(initialPrompt);
+  };
+
   const followUps = getFollowUps();
 
   return (
@@ -377,168 +392,215 @@ export default function Copilot() {
           </p>
         </motion.header>
 
-        {/* Goal auto-update notification toast */}
-        <AnimatePresence>
-          {savedGoalUpdate && (
-            <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
-              className="mb-4 flex items-center gap-3 rounded-xl border border-[#10c7a1]/40 bg-[#10c7a1]/15 px-5 py-3.5 shadow-lg">
-              <Target className="h-5 w-5 text-[#10c7a1] flex-shrink-0 animate-bounce" />
-              <div>
-                <p className="text-xs font-bold text-[#10c7a1]">Goal Progress Auto-Updated!</p>
-                <p className="text-[11px] text-white/70">
-                  Your goal <strong>"{savedGoalUpdate.title}"</strong> updated to {savedGoalUpdate.currentMetric} / {savedGoalUpdate.targetMetric} {savedGoalUpdate.unit}.
-                </p>
-              </div>
-              <button onClick={() => setSavedGoalUpdate(null)} className="ml-auto text-white/40 hover:text-white"><X className="h-4 w-4" /></button>
+        {/* View Switcher Tabs */}
+        <div className="flex justify-center gap-3 mb-6 relative z-10">
+          <button
+            onClick={() => setView('scanner')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all duration-200 cursor-pointer ${
+              view === 'scanner'
+                ? 'bg-[#7b61ff] text-white shadow-lg shadow-[#7b61ff]/20 border border-white/10'
+                : 'bg-white/5 text-white/60 hover:text-white border border-white/5'
+            }`}
+          >
+            Biometric Scanner
+          </button>
+          <button
+            onClick={() => setView('chat')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all duration-200 cursor-pointer ${
+              view === 'chat'
+                ? 'bg-[#7b61ff] text-white shadow-lg shadow-[#7b61ff]/20 border border-white/10'
+                : 'bg-white/5 text-white/60 hover:text-white border border-white/5'
+            }`}
+          >
+            Copilot Chat
+          </button>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {view === 'scanner' ? (
+            <motion.div
+              key="scanner"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.2 }}
+              className="w-full flex justify-center py-4"
+            >
+              <LiveBiometricScanner onAskCopilot={handleAskCopilotFromScan} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="chat"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.2 }}
+              className="w-full flex-1 flex flex-col"
+            >
+              {/* Goal auto-update notification toast */}
+              <AnimatePresence>
+                {savedGoalUpdate && (
+                  <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+                    className="mb-4 flex items-center gap-3 rounded-xl border border-[#10c7a1]/40 bg-[#10c7a1]/15 px-5 py-3.5 shadow-lg">
+                    <Target className="h-5 w-5 text-[#10c7a1] flex-shrink-0 animate-bounce" />
+                    <div>
+                      <p className="text-xs font-bold text-[#10c7a1]">Goal Progress Auto-Updated!</p>
+                      <p className="text-[11px] text-white/70">
+                        Your goal <strong>"{savedGoalUpdate.title}"</strong> updated to {savedGoalUpdate.currentMetric} / {savedGoalUpdate.targetMetric} {savedGoalUpdate.unit}.
+                      </p>
+                    </div>
+                    <button onClick={() => setSavedGoalUpdate(null)} className="ml-auto text-white/40 hover:text-white"><X className="h-4 w-4" /></button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* ── Chat Window ── */}
+              <section className={`flex-1 flex flex-col justify-between ${glass} p-5 mb-4 min-h-[520px] max-h-[70vh]`}>
+                
+                {/* Chat header */}
+                <header className="mb-4 flex items-center justify-between border-b border-white/5 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10c7a1] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10c7a1]"></span>
+                    </span>
+                    <p className="text-xs font-bold uppercase tracking-wider text-white/60">
+                      {activeGoals.length > 0 ? `${activeGoals.length} goals loaded as context` : 'Oracle Active'}
+                    </p>
+                  </div>
+                  {chatHistory.length > 0 && (
+                    <button onClick={() => setChatHistory([])}
+                      className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-white/50 hover:text-white transition">
+                      <RefreshCw className="h-3 w-3" /> Reset Conversation
+                    </button>
+                  )}
+                </header>
+
+                {/* Message List */}
+                <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-1 scrollbar-thin scrollbar-thumb-white/10">
+                  {chatHistory.length === 0 ? (
+                    <div className="flex h-full flex-col items-center justify-center text-center text-sm text-white/30 px-6">
+                      <Bot className="h-12 w-12 text-[#7b61ff]/40 mb-3 animate-pulse" />
+                      <p className="font-semibold text-white/50">Welcome to your Twin Copilot</p>
+                      <p className="text-xs max-w-sm mt-1">
+                        Upload an image of your meal to analyze nutritional additions, upload a bank statement to plan next month, or ask questions relative to your SMART goals.
+                      </p>
+                    </div>
+                  ) : (
+                    chatHistory.map((msg, i) => (
+                      <ChatBubble key={i} msg={msg} />
+                    ))
+                  )}
+                  {isConsulting && (
+                    <div className="flex gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#10c7a1]/20 text-[#10c7a1]">
+                        <Bot className="h-4 w-4" />
+                      </div>
+                      <div className="rounded-2xl rounded-tl-sm border border-white/10 bg-white/5 px-4 py-3">
+                        <div className="flex gap-1 items-center">
+                          {[0, 1, 2].map(i => (
+                            <motion.div key={i} className="h-1.5 w-1.5 rounded-full bg-[#7b61ff]"
+                              animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }} />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* Suggestions and inputs */}
+                <div className="space-y-3">
+                  {/* Follow-up chips */}
+                  <AnimatePresence>
+                    {followUps.length > 0 && !isConsulting && (
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex gap-2 flex-wrap max-h-24 overflow-y-auto">
+                        {followUps.map((chip, i) => (
+                          <button key={i} onClick={() => handleAskOracle(chip)} disabled={isConsulting}
+                            className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
+                            <ChevronRight className="h-3 w-3 text-[#7b61ff]" /> {chip}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Chat Attachment Preview */}
+                  {chatFile && (
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/5 p-2.5">
+                      <div className="flex items-center gap-2.5">
+                        {chatFilePreview ? (
+                          <img src={chatFilePreview} alt="Preview" className="h-10 w-10 rounded-lg object-cover border border-white/10" />
+                        ) : (
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 text-white/50 border border-white/10">
+                            <FileText className="h-5 w-5 text-[#7b61ff]" />
+                          </div>
+                        )}
+                        <div className="text-left">
+                          <p className="text-xs font-bold text-white max-w-[200px] truncate">{chatFile.name}</p>
+                          <p className="text-[10px] text-white/40">{(chatFile.size / 1024).toFixed(1)} KB</p>
+                        </div>
+                      </div>
+                      <button onClick={clearChatFile} className="rounded-full bg-white/10 p-1 hover:bg-white/20 text-white/60 hover:text-white transition">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Input Row */}
+                  <div className="flex gap-2.5 items-center">
+                    <input type="file" ref={fileInputRef} className="hidden"
+                      accept="image/*,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      onChange={handleChatFileSelect} />
+                    
+                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isConsulting}
+                      className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition disabled:opacity-40">
+                      <Paperclip className="h-5 w-5" />
+                    </button>
+
+                    <div className="relative flex-1">
+                      <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleAskOracle();
+                          }
+                        }}
+                        placeholder={isListening ? 'Listening...' : 'Type a question or ask about an attached file...'}
+                        className={`w-full h-12 rounded-xl border pl-4 pr-12 text-xs text-white placeholder-white/25 bg-white/5 focus:outline-none transition-colors ${
+                          isListening ? 'border-[#ff4d7d]/50 bg-[#ff4d7d]/5' : 'border-white/10 focus:border-[#7b61ff]'}`}
+                        disabled={isConsulting} />
+                      <button type="button" onClick={toggleListening} disabled={isConsulting}
+                        className={`absolute right-3.5 top-1/2 -translate-y-1/2 flex h-7.5 w-7.5 items-center justify-center rounded-lg transition-all ${
+                          isListening ? 'bg-[#ff4d7d] text-white animate-pulse' : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'}`}>
+                        {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                      </button>
+                    </div>
+
+                    <button onClick={() => handleAskOracle()} disabled={isConsulting || isListening || (!chatInput.trim() && !chatFile)}
+                      className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#7b61ff] text-white shadow-lg transition hover:bg-[#6345ed] disabled:opacity-40 disabled:hover:bg-[#7b61ff]">
+                      {isConsulting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* TTS button for last oracle response */}
+                {chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === 'assistant' && (
+                  <div className="mt-2.5 flex justify-end border-t border-white/5 pt-2">
+                    <button onClick={() => {
+                      const last = chatHistory[chatHistory.length - 1].content;
+                      handleSpeak(`${last.verdict}. ${last.action || ''}`);
+                    }} className="flex items-center gap-1.5 rounded-lg border border-[#7b61ff]/20 bg-[#7b61ff]/5 px-2.5 py-1.5 text-xs font-semibold text-white/50 hover:text-white transition">
+                      {isSpeaking ? <StopCircle className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                      {isSpeaking ? 'Stop Reading' : 'Read Aloud'}
+                    </button>
+                  </div>
+                )}
+
+              </section>
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* ── Chat Window ── */}
-        <section className={`flex-1 flex flex-col justify-between ${glass} p-5 mb-4 min-h-[520px] max-h-[70vh]`}>
-          
-          {/* Chat header */}
-          <header className="mb-4 flex items-center justify-between border-b border-white/5 pb-3">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10c7a1] opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10c7a1]"></span>
-              </span>
-              <p className="text-xs font-bold uppercase tracking-wider text-white/60">
-                {activeGoals.length > 0 ? `${activeGoals.length} goals loaded as context` : 'Oracle Active'}
-              </p>
-            </div>
-            {chatHistory.length > 0 && (
-              <button onClick={() => setChatHistory([])}
-                className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-white/50 hover:text-white transition">
-                <RefreshCw className="h-3 w-3" /> Reset Conversation
-              </button>
-            )}
-          </header>
-
-          {/* Message List */}
-          <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-1 scrollbar-thin scrollbar-thumb-white/10">
-            {chatHistory.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center text-center text-sm text-white/30 px-6">
-                <Bot className="h-12 w-12 text-[#7b61ff]/40 mb-3 animate-pulse" />
-                <p className="font-semibold text-white/50">Welcome to your Twin Copilot</p>
-                <p className="text-xs max-w-sm mt-1">
-                  Upload an image of your meal to analyze nutritional additions, upload a bank statement to plan next month, or ask questions relative to your SMART goals.
-                </p>
-              </div>
-            ) : (
-              chatHistory.map((msg, i) => (
-                <ChatBubble key={i} msg={msg} />
-              ))
-            )}
-            {isConsulting && (
-              <div className="flex gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#10c7a1]/20 text-[#10c7a1]">
-                  <Bot className="h-4 w-4" />
-                </div>
-                <div className="rounded-2xl rounded-tl-sm border border-white/10 bg-white/5 px-4 py-3">
-                  <div className="flex gap-1 items-center">
-                    {[0, 1, 2].map(i => (
-                      <motion.div key={i} className="h-1.5 w-1.5 rounded-full bg-[#7b61ff]"
-                        animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Suggestions and inputs */}
-          <div className="space-y-3">
-            {/* Follow-up chips */}
-            <AnimatePresence>
-              {followUps.length > 0 && !isConsulting && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex gap-2 flex-wrap max-h-24 overflow-y-auto">
-                  {followUps.map((chip, i) => (
-                    <button key={i} onClick={() => handleAskOracle(chip)} disabled={isConsulting}
-                      className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-white/60 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40">
-                      <ChevronRight className="h-3 w-3 text-[#7b61ff]" /> {chip}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* Chat Attachment Preview */}
-            {chatFile && (
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-white/15 bg-white/5 p-2.5">
-                <div className="flex items-center gap-2.5">
-                  {chatFilePreview ? (
-                    <img src={chatFilePreview} alt="Preview" className="h-10 w-10 rounded-lg object-cover border border-white/10" />
-                  ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 text-white/50 border border-white/10">
-                      <FileText className="h-5 w-5 text-[#7b61ff]" />
-                    </div>
-                  )}
-                  <div className="text-left">
-                    <p className="text-xs font-bold text-white max-w-[200px] truncate">{chatFile.name}</p>
-                    <p className="text-[10px] text-white/40">{(chatFile.size / 1024).toFixed(1)} KB</p>
-                  </div>
-                </div>
-                <button onClick={clearChatFile} className="rounded-full bg-white/10 p-1 hover:bg-white/20 text-white/60 hover:text-white transition">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-
-            {/* Input Row */}
-            <div className="flex gap-2.5 items-center">
-              <input type="file" ref={fileInputRef} className="hidden"
-                accept="image/*,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                onChange={handleChatFileSelect} />
-              
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isConsulting}
-                className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition disabled:opacity-40">
-                <Paperclip className="h-5 w-5" />
-              </button>
-
-              <div className="relative flex-1">
-                <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleAskOracle();
-                    }
-                  }}
-                  placeholder={isListening ? 'Listening...' : 'Type a question or ask about an attached file...'}
-                  className={`w-full h-12 rounded-xl border pl-4 pr-12 text-xs text-white placeholder-white/25 bg-white/5 focus:outline-none transition-colors ${
-                    isListening ? 'border-[#ff4d7d]/50 bg-[#ff4d7d]/5' : 'border-white/10 focus:border-[#7b61ff]'}`}
-                  disabled={isConsulting} />
-                <button type="button" onClick={toggleListening} disabled={isConsulting}
-                  className={`absolute right-3.5 top-1/2 -translate-y-1/2 flex h-7.5 w-7.5 items-center justify-center rounded-lg transition-all ${
-                    isListening ? 'bg-[#ff4d7d] text-white animate-pulse' : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white'}`}>
-                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                </button>
-              </div>
-
-              <button onClick={() => handleAskOracle()} disabled={isConsulting || isListening || (!chatInput.trim() && !chatFile)}
-                className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#7b61ff] text-white shadow-lg transition hover:bg-[#6345ed] disabled:opacity-40 disabled:hover:bg-[#7b61ff]">
-                {isConsulting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-              </button>
-            </div>
-          </div>
-
-          {/* TTS button for last oracle response */}
-          {chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === 'assistant' && (
-            <div className="mt-2.5 flex justify-end border-t border-white/5 pt-2">
-              <button onClick={() => {
-                const last = chatHistory[chatHistory.length - 1].content;
-                handleSpeak(`${last.verdict}. ${last.action || ''}`);
-              }} className="flex items-center gap-1.5 rounded-lg border border-[#7b61ff]/20 bg-[#7b61ff]/5 px-2.5 py-1.5 text-xs font-semibold text-white/50 hover:text-white transition">
-                {isSpeaking ? <StopCircle className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                {isSpeaking ? 'Stop Reading' : 'Read Aloud'}
-              </button>
-            </div>
-          )}
-
-        </section>
-
       </div>
     </div>
   );
