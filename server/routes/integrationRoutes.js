@@ -34,11 +34,14 @@ router.get('/health', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     const User = (await import('../models/User.js')).default;
     const user = await User.findById(userId).select('+healthIntegration.googleFit.accessToken +healthIntegration.googleFit.refreshToken +healthIntegration.googleFit.tokenExpiresAt');
-    if (user && user.healthIntegration?.provider === 'anjali_googlefit' && user.healthIntegration?.connected) {
+    if (user && user.healthIntegration?.provider?.includes('googlefit') && user.healthIntegration?.connected) {
       try {
         const { default: GoogleFitService } = await import('../services/GoogleFitService.js');
         const metrics = await GoogleFitService.getLiveMetricsForUser(user);
-        console.log('[IntegrationRoutes] raw Google Fit metrics for user', userId, JSON.stringify(metrics));
+        
+        if (!metrics || Object.keys(metrics).length === 0) {
+          throw new Error("Google Fit returned no health data. Real integration unavailable.");
+        }
 
         // Normalize Google Fit service keys to the frontend expected schema
         const mappedMetrics = {
@@ -50,12 +53,12 @@ router.get('/health', authenticateToken, async (req, res) => {
           restingHeartRate: metrics.restingHeartRate ?? null,
         };
 
-        console.log('[IntegrationRoutes] mapped metrics to frontend schema for user', userId, JSON.stringify(mappedMetrics));
+        console.log('Google Fit sync completed');
         return res.status(200).json({ success: true, data: { source: 'Google Fit', lastSync: new Date().toISOString(), metrics: mappedMetrics } });
       } catch (err) {
-        console.error('[IntegrationRoutes] Google Fit fetch failed, falling back to mock health:', err.message || err);
+        console.error('[IntegrationRoutes] Google Fit fetch failed:', err.message || err);
         console.error(err.stack || err);
-        // fallthrough to mock below
+        return res.status(500).json({ success: false, message: err.message || 'Google Fit fetch failed' });
       }
     }
   } catch (err) {

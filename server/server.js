@@ -80,7 +80,7 @@ app.use('/api/gamification', gamificationRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/health-metrics', healthRoutes);
-app.use('/api/health-integration', healthIntegrationRoutes);
+app.use('/api/health/integration', healthIntegrationRoutes);
 app.use('/api/career', careerRoutes);
 app.use('/api/career-integrations', careerIntegrationRoutes);
 app.use('/api/ai', aiRoutes);

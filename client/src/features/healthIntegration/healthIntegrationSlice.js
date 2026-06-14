@@ -1,8 +1,7 @@
 import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
-import axios from 'axios';
+import healthApi from '../../services/healthIntegrationApi.js';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-const DEFAULT_PROVIDER = 'gargi_fitband';
+const DEFAULT_PROVIDER = 'anjali_fitband';
 
 const initialState = {
   connected: false,
@@ -20,12 +19,28 @@ export const fetchHealthIntegration = createAsyncThunk(
   'healthIntegration/fetch',
   async (_, { rejectWithValue }) => {
     try {
-      const integration = await axios.get(`${API_BASE_URL}/api/health-integration`, { headers: authHeaders() });
+      const statusRes = await healthApi.getIntegrationStatus();
+      const status = statusRes.data || {};
+      
       let deviceData = {};
-      if (integration.data?.data?.connected) {
-        deviceData = await fetchMockDeviceData();
+      if (status.connected && status.provider) {
+        const metricsRes = await healthApi.getMetrics(status.provider);
+        const rawMetrics = metricsRes.data?.metrics || {};
+        deviceData = {
+          ...rawMetrics,
+          avgHeartRate: rawMetrics.heartRate ?? null,
+          activeCalories: rawMetrics.calories ?? null,
+          hrv: rawMetrics.hrv ?? null
+        };
       }
-      return { ...(integration.data.data || {}), deviceData };
+      
+      return {
+        connected: status.connected,
+        provider: status.provider || DEFAULT_PROVIDER,
+        integrationLink: status.provider || '',
+        lastSync: new Date().toISOString(),
+        deviceData
+      };
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Could not load health integration.');
     }
@@ -34,15 +49,40 @@ export const fetchHealthIntegration = createAsyncThunk(
 
 export const saveHealthIntegration = createAsyncThunk(
   'healthIntegration/save',
-  async ({ integrationLink, provider = DEFAULT_PROVIDER }, { rejectWithValue }) => {
+  async ({ integrationLink }, { rejectWithValue }) => {
     try {
-      const integration = await axios.put(
-        `${API_BASE_URL}/api/health-integration`,
-        { integrationLink, provider },
-        { headers: authHeaders() },
-      );
-      const deviceData = await fetchMockDeviceData();
-      return { ...(integration.data.data || {}), deviceData };
+      if (integrationLink === 'anjali_fitband') {
+        const connectRes = await healthApi.connectMockDevice();
+        const data = connectRes.data || {};
+        const metricsRes = await healthApi.getMetrics('anjali_fitband');
+        const rawMetrics = metricsRes.data?.metrics || {};
+        const deviceData = {
+          ...rawMetrics,
+          avgHeartRate: rawMetrics.heartRate ?? null,
+          activeCalories: rawMetrics.calories ?? null,
+          hrv: rawMetrics.hrv ?? null
+        };
+        return {
+          connected: data.connected,
+          provider: data.provider,
+          integrationLink: data.provider,
+          lastSync: new Date().toISOString(),
+          deviceData
+        };
+      } else if (integrationLink === 'anjali_googlefit') {
+        const connectRes = await healthApi.connectGoogleFit();
+        if (connectRes.url) {
+          window.location.href = connectRes.url;
+        }
+        return {
+          connected: false,
+          provider: 'anjali_googlefit',
+          integrationLink: 'anjali_googlefit',
+          lastSync: null,
+          deviceData: {}
+        };
+      }
+      return rejectWithValue('Invalid integration link.');
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Could not save health integration.');
     }
@@ -53,8 +93,8 @@ export const disconnectHealthIntegration = createAsyncThunk(
   'healthIntegration/disconnect',
   async (_, { rejectWithValue }) => {
     try {
-      const integration = await axios.delete(`${API_BASE_URL}/api/health-integration`, { headers: authHeaders() });
-      return integration.data.data || {};
+      const res = await healthApi.disconnect();
+      return res.data || {};
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Could not disconnect health integration.');
     }
@@ -123,16 +163,4 @@ function applyHealthIntegration(state, payload = {}) {
   state.integrationLink = payload.integrationLink || '';
   state.lastSync = payload.lastSync || null;
   state.deviceData = payload.deviceData || {};
-}
-
-async function fetchMockDeviceData() {
-  const response = await axios.get(`${API_BASE_URL}/api/integrations/health`, { headers: authHeaders() });
-  console.log('[healthIntegrationSlice] /api/integrations/health response:', response.data);
-  const metrics = response.data?.data?.metrics || {};
-  console.log('[healthIntegrationSlice] extracted metrics:', metrics);
-  return { ...metrics, sleepHours: metrics.sleepHours != null ? parseFloat(metrics.sleepHours) : metrics.sleepHours };
-}
-
-function authHeaders() {
-  return { Authorization: `Bearer ${localStorage.getItem('authToken') || ''}` };
 }

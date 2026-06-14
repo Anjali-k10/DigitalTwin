@@ -14,15 +14,6 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     this.setState({ errorInfo });
     console.error('ErrorBoundary caught an error:', error, errorInfo);
-    
-    // Send error report to backend
-    const API = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-    axios.post(`${API}/api/auth/log-client-error`, {
-      message: error.message,
-      stack: error.stack,
-      componentStack: errorInfo?.componentStack,
-      url: window.location.href,
-    }).catch(err => console.error('Failed to send error report to backend:', err));
   }
 
   render() {

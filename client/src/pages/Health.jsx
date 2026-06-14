@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import healthApi from '../services/healthIntegrationApi.js';
 import { useDispatch, useSelector } from 'react-redux';
 import { useGamification } from '../context/GamificationContext';
 import {
@@ -166,34 +167,6 @@ function NoDataCell({ label, icon: Icon, onConnect }) {
 export default function Health() {
   const authState = useSelector((state) => state.auth);
   
-  useEffect(() => {
-    console.log('--- AUTHENTICATION / SESSION DEBUG LOGS ---');
-    console.log('window.location.href:', window.location.href);
-    console.log('localStorage authToken:', localStorage.getItem('authToken'));
-    console.log('localStorage user:', localStorage.getItem('user'));
-    console.log('Redux Auth State:', authState);
-    console.log('------------------------------------------');
-  }, []);
-
-  console.log('Health page mounted');
-  console.log('location.search', window.location.search);
-
-  // Global error listener to capture React/JS errors
-  useEffect(() => {
-    const handleError = (event) => {
-      console.error('Captured global error:', event.error || event.message);
-    };
-    const handleRejection = (event) => {
-      console.error('Captured unhandled rejection:', event.reason);
-    };
-    window.addEventListener('error', handleError);
-    window.addEventListener('unhandledrejection', handleRejection);
-    return () => {
-      window.removeEventListener('error', handleError);
-      window.removeEventListener('unhandledrejection', handleRejection);
-    };
-  }, []);
-
   const dispatch = useDispatch();
   const healthIntegration = useSelector((state) => state.healthIntegration);
   const authUser = useSelector((state) => state.auth?.user);
@@ -297,29 +270,38 @@ export default function Health() {
   async function fetchWearable() {
     setWearable({});
     console.log('[HEALTH] fetchWearable called. healthIntegration:', healthIntegration);
-    console.log('[HEALTH] healthIntegration.deviceData BEFORE fetch:', healthIntegration.deviceData);
     try {
-      const res = await axios.get(`${API}/api/integrations/health`, {
-        headers: { Authorization: `Bearer ${token()}` },
-      });
-      console.log('[HEALTH] /api/integrations/health response:', res.data);
-      if (res.data?.success && res.data?.data?.metrics) {
-        const m = res.data.data.metrics;
-        console.log('[HEALTH] metrics received:', m);
-        m.sleepHours = parseFloat(m.sleepHours);
+      const provider = healthIntegration.provider || 'anjali_fitband';
+      const res = await healthApi.getMetrics(provider);
+      console.log('[HEALTH] getMetrics response:', res);
+      if (res?.success && res?.data?.metrics) {
+        const m = { ...res.data.metrics };
+
+        // Normalize naming properties for UI compatibility
+        m.avgHeartRate = m.heartRate;
+        m.activeCalories = m.calories;
+
+        // Display rendering fallback check
+        if (m.sleepHours !== null && m.sleepHours !== undefined) {
+          const parsed = parseFloat(m.sleepHours);
+          m.sleepHours = isNaN(parsed) ? null : parsed;
+        }
+
+        console.log('[9] Health Page Render - Metrics:', m);
         setWearable(m);
         setSyncStatus('connected');
         window.dispatchEvent(new Event('dashboard-data-updated'));
         window.dispatchEvent(new Event('gamification-updated'));
+        
         const sleepGoal = dashProfile?.profile?.sleepHours || 7;
         if (m.steps >= 10000)                                triggerReward(50, 'Daily Step Goal Hit', '👟');
-        if (m.sleepHours >= sleepGoal)                       triggerReward(40, 'Sleep Goal Achieved', '💤');
+        if (m.sleepHours && m.sleepHours >= sleepGoal)       triggerReward(40, 'Sleep Goal Achieved', '💤');
         if (m.avgHeartRate >= 55 && m.avgHeartRate <= 85)    triggerReward(30, 'Healthy Resting HR', '❤️');
         if (m.hrv > 60)                                      triggerReward(75, 'Optimal HRV Recovery', '⚡');
       } else {
         setWearable(null);
         setSyncStatus('error');
-        setSyncError('Device returned no data. Check your Fitbit connection in Settings.');
+        setSyncError('Device returned no data. Check your connection in Settings.');
       }
     } catch (err) {
       setWearable(null);
@@ -410,7 +392,7 @@ export default function Health() {
   }
 
   async function saveHealthFromPage() {
-      console.log("SAVE_HEALTH_FROM_PAGE EXECUTED");
+    console.log("SAVE_HEALTH_FROM_PAGE EXECUTED");
     console.log("healthLinkDraft =", healthLinkDraft);
     if (!healthLinkDraft.trim()) {
       setHealthPageError('Enter your health integration link.');
@@ -419,90 +401,42 @@ export default function Health() {
 
     setHealthPageError('');
 
-    // Special-case: start Google Fit OAuth flow instead of saving as a simple provider
-    if (healthLinkDraft.trim() === 'anjali_googlefit') {
-      console.log('[HEALTH] Google Fit connect requested');
-      try {
-        const url = `${API}/api/health/google/connect?origin=${encodeURIComponent(window.location.origin)}`;
-        console.log('[HEALTH] Calling /api/health/google/connect with origin:', window.location.origin);
-        const res = await axios.get(url, { headers: { Authorization: `Bearer ${token()}`, Accept: 'application/json' } });
-        console.log('[HEALTH] Response:', res.data);
-        if (res.data?.url) {
-          console.log('[HEALTH] OAuth URL received');
-          window.location.href = res.data.url;
-          return;
-        }
-        setHealthPageError('Could not start Google OAuth flow');
-      } catch (err) {
-        console.error('[HEALTH] Google Fit connect error', err?.stack || err);
-        setHealthPageError(err?.response?.data?.message || 'Could not start Google OAuth flow');
-      }
-      return;
-    }
-
     try {
+      if (healthLinkDraft.trim() === 'anjali_googlefit') {
+        console.log("[1] OAuth Start - Initiated from Page");
+      }
       const saved = await dispatch(saveHealthIntegration({ integrationLink: healthLinkDraft.trim() })).unwrap();
       localStorage.setItem(LS_DISMISSED, 'true');
       setPromptDismissed(true);
       setSyncStatus('connected');
       setWearable(saved.deviceData || {});
     } catch (err) {
-      setHealthPageError(err?.response?.data?.message || 'Could not save health integration.');
+      setHealthPageError(err?.message || 'Could not save health integration.');
     }
   }
 
   async function submitConnect() {
     if (!connectInput.trim()) { setConnectError('Enter your health integration link.'); return; }
     setConnectLoading(true); setConnectError('');
-    // Basic debug logs for connect flow
     console.log('[HEALTH] Connect clicked');
     console.log('[HEALTH] Provider:', connectInput);
-    console.log('[HEALTH] Current user id:', authUser?._id || authUser?.id || null);
-    console.log('[HEALTH] Has token:', !!token());
-
-    // If user provided the Google Fit provider key, start OAuth flow via backend
-    if (connectInput.trim() === 'anjali_googlefit') {
-      console.log('[HEALTH] Using Google Fit flow');
-      try {
-        const url = `${API}/api/health/google/connect?origin=${encodeURIComponent(window.location.origin)}`;
-        console.log('[HEALTH] Calling:', url);
-        const res = await axios.get(url, { headers: { Authorization: `Bearer ${token()}`, Accept: 'application/json' } });
-        console.log('[HEALTH] Response:', res.data);
-        if (res.data?.url) {
-          // Navigate browser to Google consent
-          window.location.href = res.data.url;
-          return;
-        }
-        setConnectError('Could not start Google OAuth flow');
-      } catch (err) {
-        console.error('[HEALTH] Connect error', err?.stack || err);
-        setConnectError(err?.response?.data?.message || 'Could not start Google OAuth flow');
-      } finally { setConnectLoading(false); }
-      return;
-    }
 
     try {
-      console.log('[HEALTH] Using Mock Provider flow');
-      console.log('[HEALTH] Calling saveHealthIntegration via Redux action');
+      if (connectInput.trim() === 'anjali_googlefit') {
+        console.log("[1] OAuth Start - Initiated from Modal");
+      }
       const saved = await dispatch(saveHealthIntegration({ integrationLink: connectInput.trim() })).unwrap();
       localStorage.setItem(LS_DISMISSED, 'true');
       setPromptDismissed(true);
       setSyncStatus('connected');
       setConnectModal(false);
-      const m = saved.deviceData || {};
-      console.log('[HEALTH] Response from saveHealthIntegration:', saved);
-      setWearable(m);
-      const sg = dashProfile?.profile?.sleepHours || 7;
-      if (m.steps >= 10000)                             triggerReward(50, 'Daily Step Goal Hit', '👟');
-      if (m.sleepHours >= sg)                           triggerReward(40, 'Sleep Goal Achieved', '💤');
-      if (m.avgHeartRate >= 55 && m.avgHeartRate <= 85) triggerReward(30, 'Healthy Resting HR', '❤️');
-      if (m.hrv > 60)                                   triggerReward(75, 'Optimal HRV Recovery', '⚡');
+      setWearable(saved.deviceData || {});
     } catch (err) {
       const msg = err?.response?.status === 401
         ? 'Session expired — please log in again.'
         : err?.response?.status === 404
           ? 'Health endpoint not found. Check your server is running on port 5001.'
-        : err?.response?.data?.message || 'Connection failed. Make sure your dev server is running.';
+        : err?.message || 'Connection failed. Make sure your dev server is running.';
       setConnectError(msg);
     } finally { setConnectLoading(false); }
   }
@@ -862,7 +796,7 @@ export default function Health() {
                 </h2>
                 <p className="mt-1 text-sm text-white/50">
                   {wearableReady
-                    ? `Synced from your device · ${wearable.steps?.toLocaleString()} steps · ${wearable.sleepHours}h sleep · HRV ${wearable.hrv}ms`
+                    ? `Synced from your device · ${wearable.steps?.toLocaleString()} steps · ${wearable.sleepHours}h sleep · HRV ${wearable.hrv != null ? `${wearable.hrv}ms` : 'unavailable'}`
                     : 'Your milestones are validated the moment your device data arrives — no manual logging needed.'}
                 </p>
               </div>
@@ -1046,10 +980,10 @@ export default function Health() {
                   </div>
                   <div className="space-y-3 text-sm leading-relaxed flex-1">
                     {wearable.sleepHours < sleepGoal && <GapItem text={`Sleep was ${wearable.sleepHours}h — ${(sleepGoal - wearable.sleepHours).toFixed(1)}h short of your ${sleepGoal}h target.`} />}
-                    {wearable.hrv < 55 && <GapItem text={`HRV at ${wearable.hrv}ms — your nervous system needs rest today.`} />}
+                    {wearable.hrv != null && wearable.hrv < 55 && <GapItem text={`HRV at ${wearable.hrv}ms — your nervous system needs rest today.`} />}
                     {wearable.avgHeartRate > 85 && <GapItem text={`Resting HR is ${wearable.avgHeartRate} bpm — elevated, likely from stress or poor sleep.`} />}
                     {isSmoker && <GapItem text="Smoking is measurably raising your resting HR and suppressing HRV recovery." />}
-                    {wearable.sleepHours >= sleepGoal && wearable.hrv >= 55 && wearable.avgHeartRate <= 85 && (
+                    {wearable.sleepHours >= sleepGoal && wearable.hrv != null && wearable.hrv >= 55 && wearable.avgHeartRate <= 85 && (
                       <div className="flex items-start gap-2.5 text-[#16a34a]">
                         <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#16a34a]" />
                         <p>All recovery signals look healthy — you're set for a strong day.</p>
@@ -1065,7 +999,7 @@ export default function Health() {
                   <div className="space-y-3 text-sm text-[#16a34a] leading-relaxed flex-1">
                     <ActionItem text={`Drink ${weather?.hydrationL ?? 2.5}L — front-load before noon.`} />
                     {wearable.steps < 10000 && <ActionItem text={`${(10000 - wearable.steps).toLocaleString()} steps remaining to hit your goal.`} />}
-                    {wearable.hrv < 55
+                    {wearable.hrv != null && wearable.hrv < 55
                       ? <ActionItem text="HRV is low — swap today's workout for a 20-min walk or yoga." />
                       : <ActionItem text={weather?.isHot ? 'Outdoor workout after 7 PM to avoid heat strain.' : 'Conditions are clear for a full workout today.'} />}
                     <ActionItem text="Screens off by 10:30 PM — the highest-impact sleep intervention." />
@@ -1171,11 +1105,13 @@ export default function Health() {
                     </div>
                     {wearableReady ? (
                       <p className="text-sm text-white/70 leading-relaxed">
-                        {wearable.hrv < 55
+                        {wearable.hrv != null && wearable.hrv < 55
                           ? `Your HRV is ${wearable.hrv}ms — smoking is actively suppressing your recovery. Each cigarette-free day pushes this number up.`
                           : wearable.avgHeartRate > 75
                           ? `Your resting HR is ${wearable.avgHeartRate} bpm. Quitting for 7 days typically drops resting HR by 5–8 bpm in smokers.`
-                          : `Your HRV is ${wearable.hrv}ms and climbing. Staying smoke-free is working — keep going.`}
+                          : wearable.hrv != null
+                          ? `Your HRV is ${wearable.hrv}ms and climbing. Staying smoke-free is working — keep going.`
+                          : `Wear your device during sleep to track recovery metrics like HRV.`}
                       </p>
                     ) : (
                       <p className="text-sm text-white/55 leading-relaxed">
@@ -1242,11 +1178,17 @@ export default function Health() {
                       ? `${wearable.steps.toLocaleString()} steps today — this volume is strongly correlated with faster deep-sleep onset tonight.`
                       : `${(10000 - wearable.steps).toLocaleString()} steps remaining. More movement today will directly improve your sleep depth.`}
                     isGood={wearable.steps >= 8000} />
-                  <FeedItem color={wearable.hrv >= 55 ? '#16a34a' : '#ea580c'} title="HRV & Recovery Readiness"
-                    text={wearable.hrv >= 55
-                      ? `HRV ${wearable.hrv}ms — your nervous system is recovered and ready.`
-                      : `HRV ${wearable.hrv}ms — below recovery threshold. Swap intense exercise for rest or a slow walk today.`}
-                    isGood={wearable.hrv >= 55} />
+                  {wearable.hrv != null ? (
+                    <FeedItem color={wearable.hrv >= 55 ? '#16a34a' : '#ea580c'} title="HRV & Recovery Readiness"
+                      text={wearable.hrv >= 55
+                        ? `HRV ${wearable.hrv}ms — your nervous system is recovered and ready.`
+                        : `HRV ${wearable.hrv}ms — below recovery threshold. Swap intense exercise for rest or a slow walk today.`}
+                      isGood={wearable.hrv >= 55} />
+                  ) : (
+                    <FeedItem color="#e4e2e1" title="HRV & Recovery Readiness"
+                      text="HRV data is currently unavailable. Wear your device during sleep to record HRV."
+                      isGood={false} />
+                  )}
                   {isSmoker && (
                     <FeedItem color="#ea580c" title="Nicotine & Heart Rate"
                       text={`Your resting HR (${wearable.avgHeartRate} bpm) is elevated. Every smoke-free day reduces this.`}
@@ -1284,7 +1226,7 @@ export default function Health() {
               <h3 className="mb-1 text-xl font-bold tracking-tight">Recovery Trajectory</h3>
               <p className="mb-5 text-sm text-white/45">
                 {wearableReady
-                  ? `Based on your HRV ${wearable.hrv}ms, ${wearable.sleepHours}h sleep, and ${wearable.steps?.toLocaleString()} steps.`
+                  ? `Based on your HRV ${wearable.hrv != null ? `${wearable.hrv}ms` : 'unavailable'}, ${wearable.sleepHours}h sleep, and ${wearable.steps?.toLocaleString()} steps.`
                   : 'Showing the recommended path. Your personal curve appears once your device is synced.'}
               </p>
               <div className="relative mb-5 h-52 overflow-hidden rounded-xl border border-[#d8e5ea] bg-[#f7fbfc]">
@@ -1293,7 +1235,7 @@ export default function Health() {
                   <line x1="0" y1="110" x2="640" y2="110" stroke="#e4e2e1" strokeWidth="0.5" strokeDasharray="4" />
                   <line x1="0" y1="165" x2="640" y2="165" stroke="#e4e2e1" strokeWidth="0.5" strokeDasharray="4" />
                   {wearableReady ? (
-                    <path d={wearable.hrv >= 55 ? "M0 130 Q110 110 210 90 T430 70 T640 50" : "M0 120 Q110 130 210 145 T430 165 T640 185"}
+                    <path d={wearable.hrv != null && wearable.hrv >= 55 ? "M0 130 Q110 110 210 90 T430 70 T640 50" : "M0 120 Q110 130 210 145 T430 165 T640 185"}
                       fill="none" opacity="0.7" stroke="#ea580c" strokeWidth="3"
                       strokeDasharray="1000" strokeDashoffset={mounted ? '0' : '1000'}
                       className="transition-all duration-[1500ms] ease-in-out" />
@@ -1306,7 +1248,7 @@ export default function Health() {
                 </svg>
                 <div className="absolute right-4 top-4 bg-white/90 backdrop-blur border border-[#d8e5ea] p-2.5 rounded-lg shadow-sm space-y-2 text-xs font-semibold">
                   <Legend color="#16a34a" label="Recommended path" />
-                  <Legend color={wearableReady ? '#ea580c' : '#e4e2e1'} label={wearableReady ? `Your trajectory (HRV ${wearable.hrv}ms)` : 'Awaiting device sync'} />
+                  <Legend color={wearableReady ? '#ea580c' : '#e4e2e1'} label={wearableReady ? `Your trajectory (HRV ${wearable.hrv != null ? `${wearable.hrv}ms` : 'unavailable'})` : 'Awaiting device sync'} />
                 </div>
               </div>
             </div>
@@ -1315,9 +1257,11 @@ export default function Health() {
                 text="Consistent sleep at your target, daily step goal, and 2L+ hydration before noon stabilise your recovery over 7 days." />
               <PathCard tone="warm" title="Your Trajectory"
                 text={wearableReady
-                  ? wearable.hrv < 55
-                    ? `HRV at ${wearable.hrv}ms indicates accumulated strain. Without rest today, burnout risk rises through the week.`
-                    : `HRV ${wearable.hrv}ms is strong. Protect your sleep window tonight to keep this trend going.`
+                  ? wearable.hrv != null
+                    ? wearable.hrv < 55
+                      ? `HRV at ${wearable.hrv}ms indicates accumulated strain. Without rest today, burnout risk rises through the week.`
+                      : `HRV ${wearable.hrv}ms is strong. Protect your sleep window tonight to keep this trend going.`
+                    : 'HRV data is currently unavailable. Wear your device during sleep to record HRV.'
                   : 'Connect your wearable — your Digital Twin will model your personal recovery curve from real data.'} />
             </div>
           </article>
@@ -1493,13 +1437,13 @@ function PeriodTracker({ phase, setup, symptoms, toggleSym, onMissed, onPreg, on
           <div className="h-full rounded-full transition-all duration-700" style={{width:`${pct}%`, background:`linear-gradient(90deg,${phase.color}70,${phase.color})`}} />
         </div>
       </div>
-      {wearable && (wearable.avgHeartRate > 80 || wearable.hrv < 55) && (
+      {wearable && (wearable.avgHeartRate > 80 || (wearable.hrv != null && wearable.hrv < 55)) && (
         <div className="rounded-xl border border-[#ff6b9d]/20 bg-[#ff6b9d]/8 p-3 flex items-start gap-2.5">
           <Sparkles className="h-4 w-4 shrink-0 text-[#ff6b9d] mt-0.5" />
           <p className="text-xs text-white/65 leading-relaxed">
             <span className="font-bold text-[#ff6b9d]">Your Fitbit says: </span>
             {wearable.avgHeartRate > 80 ? `elevated HR (${wearable.avgHeartRate} bpm) ` : ''}
-            {wearable.hrv < 55 ? `+ low HRV (${wearable.hrv}ms) ` : ''}
+            {wearable.hrv != null && wearable.hrv < 55 ? `+ low HRV (${wearable.hrv}ms) ` : ''}
             — consistent with {phase.name.toLowerCase()}. Your body may need extra rest today.
           </p>
         </div>
@@ -1561,7 +1505,7 @@ function PeriodTracker({ phase, setup, symptoms, toggleSym, onMissed, onPreg, on
 }
 
 function TroubleshootPanel({ condition, wearable, onBack, onConfirm }) {
-  const hasDevice = wearable && wearable.hrv !== undefined;
+  const hasDevice = wearable && wearable.hrv !== undefined && wearable.hrv !== null;
   const hrvLow = hasDevice && wearable.hrv < 55;
   const hrHigh = hasDevice && wearable.avgHeartRate > 80;
   return (
