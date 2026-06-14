@@ -6,7 +6,10 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'hi', label: 'हिन्दी' },
   { code: 'gu', label: 'ગુજરાતી' },
+  { code: 'mr', label: 'मराठी' },
+  { code: 'bn', label: 'বাংলা' },
 ];
+
 
 const CACHE_PREFIX = 'translation_';
 const ORIGINAL_TEXT_ATTR = 'data-translation-original';
@@ -40,9 +43,11 @@ function shouldTranslateText(text) {
   return !SKIP_TEXT_PATTERNS.some((pattern) => pattern.test(trimmed));
 }
 
-function getCacheKey(language, text) {
-  return `${CACHE_PREFIX}${language}_${text}`;
+function getCacheKey(language, englishText) {
+  // englishText must be the original English source string.
+  return `${CACHE_PREFIX}${language}_${englishText}`;
 }
+
 
 function readCachedTranslation(language, text) {
   try {
@@ -69,25 +74,46 @@ function getLeafTextElements(root) {
   const candidates = root.querySelectorAll(selector);
   return [...candidates].filter((element) => {
     if (isIgnoredElement(element)) return false;
+    // Only translate leaf nodes.
     if (element.querySelector(selector)) return false;
-    const text = getElementOriginalText(element);
-    return shouldTranslateText(text);
+
+    // If we don't have an original marker yet, capture it from the current DOM text.
+    // Since restorePageToEnglish no longer removes markers, this prevents translation
+    // from chaining off already-translated text.
+    const english = getElementOriginalText(element);
+
+    // If this node is already translated and has a marker, we can still translate
+    // safely by using the marker's english source.
+    return shouldTranslateText(english);
   });
 }
+
 
 function getPlaceholderElements(root) {
   return [...root.querySelectorAll(PLACEHOLDER_SELECTORS.join(','))].filter((element) => {
     if (isIgnoredElement(element)) return false;
-    return shouldTranslateText(getElementOriginalPlaceholder(element));
+    const english = getElementOriginalPlaceholder(element);
+    return shouldTranslateText(english);
   });
 }
 
+
 function getElementOriginalText(element) {
+  // Source-of-truth: the preserved ORIGINAL_TEXT_ATTR.
+  // If present, never overwrite it (prevents translating already-translated text).
   if (element.hasAttribute(ORIGINAL_TEXT_ATTR)) {
     return element.getAttribute(ORIGINAL_TEXT_ATTR).replace(/\s+/g, ' ').trim();
   }
-  return element.textContent.replace(/\s+/g, ' ').trim();
+
+  // If ORIGINAL_TEXT_ATTR was missing, capture current text.
+  // This is safe only if the current DOM text is still English.
+  // Otherwise, it would violate the invariant, so callers should ensure
+  // the ORIGINAL markers exist (restoring English should not remove them).
+  const current = element.textContent.replace(/\s+/g, ' ').trim();
+  rememberOriginalText(element);
+  return current;
 }
+
 
 function getElementOriginalPlaceholder(element) {
   if (element.hasAttribute(ORIGINAL_PLACEHOLDER_ATTR)) {
@@ -111,30 +137,32 @@ function rememberOriginalPlaceholder(element) {
 export function restorePageToEnglish(root = document.body) {
   if (!root) return;
 
+  // Restore visible content to the preserved English originals.
+  // IMPORTANT: do NOT remove the ORIGINAL_* attributes.
+  // They are the source-of-truth for subsequent language switches.
   root.querySelectorAll(`[${ORIGINAL_TEXT_ATTR}]`).forEach((element) => {
     element.textContent = element.getAttribute(ORIGINAL_TEXT_ATTR) || '';
-    element.removeAttribute(ORIGINAL_TEXT_ATTR);
     element.removeAttribute(TRANSLATED_LANG_ATTR);
   });
 
   root.querySelectorAll(`[${ORIGINAL_PLACEHOLDER_ATTR}]`).forEach((element) => {
     element.setAttribute('placeholder', element.getAttribute(ORIGINAL_PLACEHOLDER_ATTR) || '');
-    element.removeAttribute(ORIGINAL_PLACEHOLDER_ATTR);
     element.removeAttribute(TRANSLATED_LANG_ATTR);
   });
 }
 
-async function translateUniqueStrings(strings, language) {
-  const uniqueStrings = [...new Set(strings)];
+
+async function translateUniqueStrings(englishStrings, language) {
+  const uniqueStrings = [...new Set(englishStrings)];
   const resolved = new Map();
   const pending = [];
 
-  uniqueStrings.forEach((text) => {
-    const cached = readCachedTranslation(language, text);
+  uniqueStrings.forEach((englishText) => {
+    const cached = readCachedTranslation(language, englishText);
     if (cached) {
-      resolved.set(text, cached);
+      resolved.set(englishText, cached);
     } else {
-      pending.push(text);
+      pending.push(englishText);
     }
   });
 
@@ -144,39 +172,47 @@ async function translateUniqueStrings(strings, language) {
     try {
       const translatedBatch = await translate(batch, { from: 'en', to: language });
       const normalized = Array.isArray(translatedBatch) ? translatedBatch : [translatedBatch];
-      batch.forEach((text, batchIndex) => {
-        const translated = normalized[batchIndex] || text;
-        writeCachedTranslation(language, text, translated);
-        resolved.set(text, translated);
+      batch.forEach((englishText, batchIndex) => {
+        const translated = normalized[batchIndex] || englishText;
+        writeCachedTranslation(language, englishText, translated);
+        resolved.set(englishText, translated);
       });
     } catch (error) {
       console.warn('[translationService] Batch translation failed:', error);
-      batch.forEach((text) => resolved.set(text, text));
+      batch.forEach((englishText) => resolved.set(englishText, englishText));
     }
   }
 
   return resolved;
 }
 
+
 function applyTranslations(entries, translations, language) {
   entries.forEach(({ element, original, kind }) => {
     const translated = translations.get(original) || original;
+
     if (kind === 'placeholder') {
+      // Never overwrite ORIGINAL_PLACEHOLDER_ATTR once captured.
       rememberOriginalPlaceholder(element);
       element.setAttribute('placeholder', translated);
     } else {
+      // Never overwrite ORIGINAL_TEXT_ATTR once captured.
       rememberOriginalText(element);
       element.textContent = translated;
     }
+
     element.setAttribute(TRANSLATED_LANG_ATTR, language);
   });
 }
 
+
 export async function scanAndTranslate(root = document.body, language = 'en') {
   if (!root || language === 'en') {
+    // If English is selected, restore from original markers only.
     restorePageToEnglish(root);
     return;
   }
+
 
   const scanToken = ++activeScanToken;
 
