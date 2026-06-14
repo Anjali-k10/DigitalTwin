@@ -2,7 +2,7 @@ import express from 'express';
 import {
   createHealth, getHealth, getHealthAnalytics, getHealthTrajectory,
   getPeriods, getPregnancy, logSleep, logWorkout,
-  savePeriods, savePregnancy, updateHealth,
+  savePeriods, savePregnancy, updateHealth, getWeatherAdvice
 } from '../controllers/healthController.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
@@ -161,5 +161,7 @@ router.post('/meds', authenticateToken, async (req, res) => {
     res.status(500).json({ success: false, message: 'Server Error' });
   }
 });
+
+router.post('/weather-advice', authenticateToken, asyncHandler(getWeatherAdvice));
 
 export default router;

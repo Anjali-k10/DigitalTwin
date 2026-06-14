@@ -245,8 +245,49 @@ async function getLiveMetricsForUser(user) {
   return result;
 }
 
+async function fetchLastLocation(accessToken, startMillis, endMillis) {
+  try {
+    const dataSources = await fetchDataSources(accessToken);
+    const locSources = dataSources.filter(ds => ds.dataType?.name === 'com.google.location.sample');
+    if (locSources.length === 0) return null;
+    
+    const selectedSource = locSources[0];
+    const startNanos = BigInt(startMillis) * 1000000n;
+    const endNanos = BigInt(endMillis) * 1000000n;
+    const datasetId = `${startNanos}-${endNanos}`;
+
+    const res = await axios.get(
+      `https://fitness.googleapis.com/fitness/v1/users/me/dataSources/${encodeURIComponent(selectedSource.dataStreamId)}/datasets/${datasetId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` }, timeout: 5000 }
+    );
+    
+    const points = res.data?.point || [];
+    if (points.length === 0) return null;
+    
+    const latestPoint = points.reduce((latest, current) => {
+      const currentEnd = BigInt(current.endTimeNanos || 0);
+      const latestEnd = BigInt(latest.endTimeNanos || 0);
+      return currentEnd > latestEnd ? current : latest;
+    }, points[0]);
+    
+    const values = latestPoint.value || [];
+    if (values.length >= 2) {
+      const latitude = Number(values[0].fpVal);
+      const longitude = Number(values[1].fpVal);
+      if (!isNaN(latitude) && !isNaN(longitude)) {
+        return { latitude, longitude };
+      }
+    }
+    return null;
+  } catch (err) {
+    console.error('[WEATHER] Google Fit location fetch failed:', err.message);
+    return null;
+  }
+}
+
 export default {
   ensureAccessToken,
   refreshAccessToken,
   getLiveMetricsForUser,
+  fetchLastLocation,
 };

@@ -226,7 +226,20 @@ export default function Health() {
     dispatch(fetchHealthIntegration());
     fetchDashProfile();
 
-    fetchWeather();
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          fetchWeather(pos.coords.latitude, pos.coords.longitude);
+        },
+        (err) => {
+          console.warn('Geolocation denied or failed, requesting fallback:', err.message);
+          fetchWeather(null, null);
+        }
+      );
+    } else {
+      console.warn('Geolocation not supported by browser, requesting fallback');
+      fetchWeather(null, null);
+    }
   }, []);
 
   useEffect(() => {
@@ -310,43 +323,31 @@ export default function Health() {
     }
   }
 
-  async function fetchWeather() {
+  async function fetchWeather(lat, lon) {
     setWeatherLoading(true); setWeatherError(false);
     try {
-      const res = await axios.get(
-        'https://api.open-meteo.com/v1/forecast?latitude=25.60&longitude=85.12' +
-        '&current=temperature_2m,relative_humidity_2m,apparent_temperature,weathercode,windspeed_10m&timezone=auto'
-      );
-      const d   = res.data.current;
-      const temp      = Math.round(d.temperature_2m);
-      const feelsLike = Math.round(d.apparent_temperature);
-      const humidity  = Math.round(d.relative_humidity_2m);
-      const windKph   = Math.round(d.windspeed_10m);
-      const wc        = d.weathercode;
-      let condition = 'Clear Sky';
-      if (wc === 0) condition = 'Clear Sky';
-      else if (wc <= 3)  condition = 'Partly Cloudy';
-      else if (wc <= 48) condition = 'Foggy / Overcast';
-      else if (wc <= 55) condition = 'Light Drizzle';
-      else if (wc <= 67) condition = 'Rainy';
-      else if (wc <= 77) condition = 'Snowy';
-      else if (wc <= 82) condition = 'Heavy Rain';
-      else condition = 'Thunderstorm';
-      const isHot    = temp >= 32;
-      const isRainy  = wc >= 51 && wc <= 82;
-      const isStormy = wc >= 83;
-      const hydrationL = temp >= 35 ? 3.8 : temp >= 28 ? 3.2 : 2.5;
-      let clothingRec, activityRec;
-      if (isStormy)      { clothingRec = 'Full rain gear, waterproof boots.'; activityRec = 'Stay indoors. High lightning risk today.'; }
-      else if (isRainy)  { clothingRec = 'Waterproof outer layer, quick-dry fabrics.'; activityRec = 'Indoor training preferred — wet roads and low visibility.'; }
-      else if (temp >= 38){ clothingRec = 'Loose open-weave linen only. Protect your neck and head.'; activityRec = 'Outdoors only before 7 AM or after 7 PM.'; }
-      else if (isHot)    { clothingRec = 'Breathable cotton or linen. Light colours reflect heat.'; activityRec = 'Avoid peak sun hours 11 AM–4 PM.'; }
-      else if (temp >= 24){ clothingRec = 'Light breathable layers — a kurta or linen shirt is ideal.'; activityRec = 'Full day optimal for any outdoor activity.'; }
-      else if (temp <= 15){ clothingRec = 'Thermal base layer + outer shell.'; activityRec = 'Warm up well before any outdoor workout.'; }
-      else { clothingRec = 'Comfortable light layers — mild and pleasant conditions.'; activityRec = 'Ideal window for any activity level.'; }
-      setWeather({ temp, feelsLike, humidity, windKph, condition, isHot, isRainy, isStormy, clothingRec, activityRec, hydrationL });
-    } catch { setWeatherError(true); }
-    finally  { setWeatherLoading(false); }
+      const res = await healthApi.fetchWeatherAdvice(lat, lon);
+      if (res?.success && res?.data) {
+        const d = { ...res.data };
+        // Map UI-compatible variables
+        d.temp = d.temperature;
+        d.windKph = d.windSpeed;
+        d.isHot = d.temperature >= 30;
+        d.isRainy = d.condition?.toLowerCase().includes('rain') || d.condition?.toLowerCase().includes('drizzle');
+        d.isStormy = d.condition?.toLowerCase().includes('thunderstorm');
+        // Fallback hydrationL number for target logic
+        d.hydrationL = d.hydrationTarget ? parseFloat(d.hydrationTarget) : 2.5;
+        
+        setWeather(d);
+      } else {
+        setWeatherError(true);
+      }
+    } catch (err) {
+      console.error('[WEATHER] Failed to fetch advice:', err);
+      setWeatherError(true);
+    } finally {
+      setWeatherLoading(false);
+    }
   }
 
   // ── Connect modal state ────────────────────────────────────────────────────
@@ -892,7 +893,7 @@ export default function Health() {
             {weatherLoading && (
               <div className="flex items-center gap-3 py-4">
                 <div className="h-5 w-5 rounded-full border-2 border-white/20 border-t-white/60 animate-spin" />
-                <span className="text-sm text-white/40">Fetching live weather for Patna, Bihar…</span>
+                <span className="text-sm text-white/40">Fetching live weather…</span>
               </div>
             )}
             {weatherError && (
@@ -909,7 +910,7 @@ export default function Health() {
                       {weather.isHot ? <SunIcon className="h-7 w-7" /> : <CloudIcon className="h-7 w-7" />}
                     </div>
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-widest text-white/45">Live · Patna, Bihar</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-white/45">Live · {weather.city}{weather.state ? `, ${weather.state}` : ''}</p>
                       <p className="mt-0.5 text-3xl font-bold text-white">
                         {weather.temp}°C <span className="text-sm font-medium text-white/45">— {weather.condition}</span>
                       </p>
@@ -919,19 +920,19 @@ export default function Health() {
                     <Pill label={`Feels ${weather.feelsLike}°C`} />
                     <Pill label={`${weather.humidity}% humidity`} />
                     <Pill label={`${weather.windKph} km/h wind`} />
-                    {weather.isHot && <Pill label="⚠️ UV High" warn />}
+                    {weather.uvLabel && <Pill label={`⚠️ UV ${weather.uvLabel}`} warn={['High', 'Very High', 'Extreme'].includes(weather.uvLabel)} />}
                   </div>
                 </div>
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
                   <WeatherCard accent="#ffb38a" icon={<DropIcon className="h-4 w-4" />} title="Hydration Target"
-                    value={`${weather.hydrationL} L today`}
-                    desc={`At ${weather.temp}°C with ${weather.humidity}% humidity — ${weather.hydrationL > 2.5 ? 'elevated sweat loss, front-load your intake before noon' : 'standard target, spread evenly through the day'}.`} />
+                    value={weather.hydrationTarget}
+                    desc={weather.hydrationReason} />
                   <WeatherCard accent="#7df3cc" icon={<FemaleIcon className="h-4 w-4" />} title="What to Wear"
-                    value={weather.isHot ? 'Loose Linen / Cotton' : weather.isRainy ? 'Waterproof Layer' : 'Light Layers'}
-                    desc={weather.clothingRec} />
+                    value={weather.clothingAdvice}
+                    desc={weather.clothingReason} />
                   <WeatherCard accent="#c8a84b" icon={<RunIcon className="h-4 w-4" />} title="Activity Window"
-                    value={weather.isHot ? 'Before 8 AM · After 7 PM' : weather.isRainy ? 'Indoor Training' : 'All Day Optimal'}
-                    desc={weather.activityRec} />
+                    value={weather.activityWindow}
+                    desc={weather.activityReason} />
                 </div>
               </>
             )}
@@ -1164,7 +1165,7 @@ export default function Health() {
                 <h2 className="text-2xl font-bold tracking-tight text-white">Cross-Signal Insights</h2>
                 <p className="text-sm text-[#596467] mt-1">
                   {wearableReady
-                    ? `From live Fitbit data · ${weather ? weather.temp + '°C outside' : ''}`
+                    ? `From live Fitbit data${(weather && weather.temp !== null && weather.temp !== undefined) ? ` · ${weather.temp}°C outside` : ''}`
                     : 'Your profile powers these — connect a device to make them precise.'}
                 </p>
               </div>
@@ -1206,9 +1207,9 @@ export default function Health() {
                   </div>
                 </div>
               )}
-              {weather && (
+              {weather && weather.temp !== null && weather.temp !== undefined && (
                 <FeedItem color={weather.isHot ? '#ea580c' : '#2f83b7'} title="Weather & Hydration Risk"
-                  text={`${weather.temp}°C, ${weather.humidity}% humidity in Patna right now. ${weather.isHot ? `Dehydration risk is high — target ${weather.hydrationL}L and add electrolytes.` : `Conditions are mild. ${weather.hydrationL}L target applies.`}`}
+                  text={`${weather.temp}°C, ${weather.humidity}% humidity in ${weather.city} right now. ${weather.isHot ? `Dehydration risk is high — target ${weather.hydrationL}L and add electrolytes.` : `Conditions are mild. ${weather.hydrationL}L target applies.`}`}
                   isGood={!weather.isHot} />
               )}
               {aiInsights.filter(i => ['Burnout Risk','Wellness','Productivity'].includes(i.label)).map((ins, idx) => (
@@ -1614,11 +1615,11 @@ function PregDashboard({ weeks, due, weather, onReset, onBack }) {
       <div className="rounded-xl border border-white/8 bg-white/4 p-4 flex-1">
         <p className="text-[10px] font-bold uppercase tracking-wider text-white/30 mb-3">This Week's Focus</p>
         <div className="space-y-2.5">
-          <div className="flex items-start gap-2.5"><span className="text-base">💧</span><p className="text-xs text-white/55 leading-relaxed">Blood volume expanding — aim for {weather?.hydrationL ? weather.hydrationL+0.5 : 3}L+ daily to prevent dizziness and support amniotic fluid.</p></div>
+          <div className="flex items-start gap-2.5"><span className="text-base">💧</span><p className="text-xs text-white/55 leading-relaxed">Blood volume expanding — aim for {weather?.hydrationL ? parseFloat((weather.hydrationL + 0.5).toFixed(1)) : 3}L+ daily to prevent dizziness and support amniotic fluid.</p></div>
           {tri===1 && <div className="flex items-start gap-2.5"><span className="text-base">🍃</span><p className="text-xs text-white/55 leading-relaxed">Folic acid (400–800mcg/day) is critical now for neural tube development.</p></div>}
           {tri===2 && <div className="flex items-start gap-2.5"><span className="text-base">🚶</span><p className="text-xs text-white/55 leading-relaxed">20–30 min gentle walks support circulation and reduce pregnancy oedema.</p></div>}
           {tri===3 && <div className="flex items-start gap-2.5"><span className="text-base">🛌</span><p className="text-xs text-white/55 leading-relaxed">Left-side sleeping improves blood flow to baby and reduces vena cava pressure.</p></div>}
-          {weather && <div className="flex items-start gap-2.5"><span className="text-base">🌡️</span><p className="text-xs text-white/55 leading-relaxed">{weather.isHot?`At ${weather.temp}°C, avoid hot baths, saunas, and midday sun — overheating is a risk.`:'Temperature is comfortable today — light outdoor walks are safe.'}</p></div>}
+          {weather && <div className="flex items-start gap-2.5"><span className="text-base">🌡️</span><p className="text-xs text-white/55 leading-relaxed">{weather.temp !== null && weather.temp !== undefined ? (weather.isHot ? `At ${weather.temp}°C, avoid hot baths, saunas, and midday sun — overheating is a risk.` : `At ${weather.temp}°C, temperature is comfortable today — light outdoor walks are safe.`) : 'Temperature is comfortable today — light outdoor walks are safe.'}</p></div>}
         </div>
       </div>
     </div>

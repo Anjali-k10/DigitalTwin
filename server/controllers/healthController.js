@@ -1,3 +1,5 @@
+import axios from 'axios';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import GamificationProfile from '../models/GamificationProfile.js';
 import DailyTracking from '../models/DailyTracking.js';
 import {
@@ -217,3 +219,257 @@ function average(values) {
   if (!numbers.length) return 0;
   return Number((numbers.reduce((s, v) => s + v, 0) / numbers.length).toFixed(1));
 }
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const weatherCache = new Map();
+
+async function getCityFromCoordinates(lat, lon) {
+  try {
+    const response = await axios.get(`https://nominatim.openstreetmap.org/reverse`, {
+      params: {
+        format: 'jsonv2',
+        lat,
+        lon
+      },
+      headers: {
+        'User-Agent': 'DigitalTwinHealthAdvisor/1.0 (anjal943122@gmail.com)'
+      },
+      timeout: 5000
+    });
+    const address = response.data?.address || {};
+    const city = address.city || address.town || address.village || address.suburb || address.county || 'Unknown';
+    const state = address.state || '';
+    const country = address.country || '';
+    return { city, state, country };
+  } catch (err) {
+    console.error('[WEATHER] Reverse geocoding failed:', err.message);
+    return { city: 'Unknown', state: '', country: '' };
+  }
+}
+
+function getUvLabel(uvIndex) {
+  if (uvIndex <= 2) return 'Low';
+  if (uvIndex <= 5) return 'Moderate';
+  if (uvIndex <= 7) return 'High';
+  if (uvIndex <= 10) return 'Very High';
+  return 'Extreme';
+}
+
+export const getWeatherAdvice = async (req, res) => {
+  let { latitude, longitude } = req.body;
+  const userId = req.user.userId;
+
+  console.log('[WEATHER] Location received:', { latitude, longitude });
+
+  // 1. Fallback to Google Fit location if coords are missing and user has Google Fit
+  if ((latitude === undefined || latitude === null || longitude === undefined || longitude === null) && userId) {
+    try {
+      const User = (await import('../models/User.js')).default;
+      const user = await User.findById(userId).select('+healthIntegration.googleFit.accessToken +healthIntegration.googleFit.refreshToken +healthIntegration.googleFit.tokenExpiresAt');
+      if (user && user.healthIntegration?.provider?.includes('googlefit') && user.healthIntegration?.connected) {
+        const { default: GoogleFitService } = await import('../services/GoogleFitService.js');
+        const accessToken = await GoogleFitService.ensureAccessToken(user);
+        const end = Date.now();
+        const start = end - (24 * 60 * 60 * 1000); // last 24 hours
+        const gfLoc = await GoogleFitService.fetchLastLocation(accessToken, start, end);
+        if (gfLoc) {
+          latitude = gfLoc.latitude;
+          longitude = gfLoc.longitude;
+        }
+      }
+    } catch (err) {
+      console.error('[WEATHER] Error fetching Google Fit location fallback:', err.message);
+    }
+  }
+
+  // 2. Coords Fallback Check
+  if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
+    console.log('[WEATHER] Location unavailable, returning base fallback advice');
+    return res.status(200).json({
+      success: true,
+      data: {
+        city: 'Unknown',
+        state: '',
+        country: '',
+        temperature: null,
+        feelsLike: null,
+        humidity: null,
+        windSpeed: null,
+        uvIndex: null,
+        uvLabel: 'Low',
+        condition: 'Unknown',
+        hydrationTarget: '2.5L',
+        hydrationReason: 'Standard baseline fluid intake to maintain optimal hydration.',
+        clothingAdvice: 'Comfortable clothing',
+        clothingReason: 'Wear comfortable clothing suitable for your current environment.',
+        activityWindow: 'Morning or Evening',
+        activityReason: 'Avoid direct midday heat and peak UV hours.'
+      }
+    });
+  }
+
+  const cacheKey = `${Number(latitude).toFixed(2)},${Number(longitude).toFixed(2)}`;
+
+  // 3. Cache Check
+  if (weatherCache.has(cacheKey)) {
+    const cached = weatherCache.get(cacheKey);
+    if (Date.now() - cached.timestamp < 30 * 60 * 1000) {
+      console.log('[WEATHER] Cache hit');
+      console.log('[WEATHER] Returning weather advice');
+      return res.status(200).json({
+        success: true,
+        data: cached.data
+      });
+    }
+  }
+
+  console.log('[WEATHER] Cache miss');
+
+  let geoData = { city: 'Unknown', state: '', country: '' };
+  let weatherData = null;
+  let adviceData = null;
+
+  try {
+    // 4. Reverse Geocode
+    geoData = await getCityFromCoordinates(latitude, longitude);
+
+    // 5. Open-Meteo Fetch
+    const weatherRes = await axios.get(`https://api.open-meteo.com/v1/forecast`, {
+      params: {
+        latitude,
+        longitude,
+        current: 'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m',
+        daily: 'uv_index_max',
+        timezone: 'auto'
+      },
+      timeout: 5000
+    });
+    console.log('[WEATHER] OpenMeteo success');
+
+    const current = weatherRes.data?.current || {};
+    const daily = weatherRes.data?.daily || {};
+
+    const temperature = Math.round(current.temperature_2m);
+    const feelsLike = Math.round(current.apparent_temperature);
+    const humidity = Math.round(current.relative_humidity_2m);
+    const windSpeed = Math.round(current.wind_speed_10m);
+    const uvIndex = daily.uv_index_max ? Math.round(daily.uv_index_max[0]) : 0;
+    const uvLabel = getUvLabel(uvIndex);
+    const weatherCode = current.weather_code;
+
+    let condition = 'Clear Sky';
+    if (weatherCode === 0) condition = 'Clear Sky';
+    else if (weatherCode <= 3)  condition = 'Partly Cloudy';
+    else if (weatherCode <= 48) condition = 'Foggy / Overcast';
+    else if (weatherCode <= 55) condition = 'Light Drizzle';
+    else if (weatherCode <= 67) condition = 'Rainy';
+    else if (weatherCode <= 77) condition = 'Snowy';
+    else if (weatherCode <= 82) condition = 'Heavy Rain';
+    else condition = 'Thunderstorm';
+
+    weatherData = {
+      temperature,
+      feelsLike,
+      humidity,
+      windSpeed,
+      uvIndex,
+      uvLabel,
+      condition
+    };
+  } catch (err) {
+    console.error('[WEATHER] Weather fetch failed, returning fallback:', err.message);
+    return res.status(200).json({
+      success: true,
+      data: {
+        city: geoData.city,
+        state: geoData.state,
+        country: geoData.country,
+        temperature: null,
+        feelsLike: null,
+        humidity: null,
+        windSpeed: null,
+        uvIndex: null,
+        uvLabel: 'Low',
+        condition: 'Unknown',
+        hydrationTarget: '2.5L',
+        hydrationReason: 'Standard baseline fluid intake to maintain optimal hydration.',
+        clothingAdvice: 'Comfortable clothing',
+        clothingReason: 'Wear comfortable clothing suitable for your current environment.',
+        activityWindow: 'Morning or Evening',
+        activityReason: 'Avoid direct midday heat and peak UV hours.'
+      }
+    });
+  }
+
+  // 6. Gemini Generation
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const prompt = `You are a health and wellness advisor.
+
+Based on:
+Temperature: ${weatherData.temperature}°C
+Feels Like: ${weatherData.feelsLike}°C
+Humidity: ${weatherData.humidity}%
+Wind Speed: ${weatherData.windSpeed} km/h
+UV Index: ${weatherData.uvIndex}
+Condition: ${weatherData.condition}
+
+Generate JSON only (do not include any markdown styling, no backticks, no \`\`\`json):
+{
+  "hydrationTarget": "e.g., 3.8L today",
+  "hydrationReason": "e.g., High temperature increases sweat loss.",
+  "clothingAdvice": "e.g., Loose Linen / Cotton",
+  "clothingReason": "e.g., Breathable fabrics reduce heat retention.",
+  "activityWindow": "e.g., Before 8 AM · After 7 PM",
+  "activityReason": "e.g., Avoid peak UV exposure during midday."
+}
+
+Rules:
+- Hydration target should be realistic (2L–5L).
+- Recommend clothing based on temperature and humidity.
+- Recommend safest activity window.
+- Avoid medical claims.
+- Return valid JSON only.`;
+
+    const result = await Promise.race([
+      model.generateContent(prompt),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 10000))
+    ]);
+
+    const responseText = result.response.text();
+    const cleanedText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+    adviceData = JSON.parse(cleanedText);
+    console.log('[WEATHER] Gemini success');
+  } catch (err) {
+    console.warn('[WEATHER] Gemini failed, using fallback:', err.message);
+    adviceData = {
+      hydrationTarget: weatherData.temperature >= 35 ? '3.8L today' : weatherData.temperature >= 28 ? '3.2L today' : '2.5L today',
+      hydrationReason: weatherData.temperature >= 30 ? 'Warm weather increases sweat rate and fluid requirements.' : 'Standard baseline fluid intake to maintain optimal hydration.',
+      clothingAdvice: weatherData.temperature >= 28 ? 'Loose Linen / Cotton' : 'Comfortable Clothing',
+      clothingReason: weatherData.temperature >= 28 ? 'Light, breathable fabrics help dissipate body heat.' : 'Layering allows easy adjustment to changing conditions.',
+      activityWindow: weatherData.temperature >= 32 ? 'Before 8 AM · After 7 PM' : 'Any time with appropriate sun protection',
+      activityReason: weatherData.temperature >= 32 ? 'Avoiding peak heat hours minimizes thermal strain.' : 'Clear conditions are favorable for outdoor activity.'
+    };
+    console.log('[WEATHER] Gemini fallback used');
+  }
+
+  const responsePayload = {
+    city: geoData.city,
+    state: geoData.state,
+    country: geoData.country,
+    ...weatherData,
+    ...adviceData
+  };
+
+  // 7. Save to Cache
+  weatherCache.set(cacheKey, {
+    data: responsePayload,
+    timestamp: Date.now()
+  });
+
+  console.log('[WEATHER] Returning weather advice');
+  return res.status(200).json({
+    success: true,
+    data: responsePayload
+  });
+};

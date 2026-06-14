@@ -56,10 +56,20 @@ export const disconnect = async () => {
   return response.data;
 };
 
+export const fetchWeatherAdvice = async (latitude, longitude) => {
+  const response = await axios.post(
+    `${API_BASE_URL}/api/health/weather-advice`,
+    { latitude, longitude },
+    getHeaders()
+  );
+  return response.data;
+};
+
 export default {
   connectGoogleFit,
   connectMockDevice,
   getIntegrationStatus,
   getMetrics,
   disconnect,
+  fetchWeatherAdvice,
 };
