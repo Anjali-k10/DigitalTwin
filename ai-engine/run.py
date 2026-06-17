@@ -42,12 +42,32 @@ def print_startup_banner(port, env):
     print(banner)
 
 
-if __name__ == "__main__":
-    flask_env = os.getenv("FLASK_ENV", "development")
-    flask_port = int(os.getenv("FLASK_PORT", 5050))
-    flask_debug = os.getenv("FLASK_DEBUG", "True").lower() in ("true", "1", "yes")
+# if __name__ == "__main__":
+#     flask_env = os.getenv("FLASK_ENV", "development")
+#     flask_port = int(os.getenv("FLASK_PORT", 5050))
+#     flask_debug = os.getenv("FLASK_DEBUG", "True").lower() in ("true", "1", "yes")
 
-    app = create_app(flask_env)
+#     app = create_app(flask_env)
+
+#     print_startup_banner(str(flask_port), flask_env)
+
+#     app.run(
+#         host="0.0.0.0",
+#         port=flask_port,
+#         debug=flask_debug,
+#     )
+flask_env = os.getenv("FLASK_ENV", "production")
+
+app = create_app(flask_env)
+
+if __name__ == "__main__":
+
+    flask_port = int(os.getenv("PORT", os.getenv("FLASK_PORT", 5050)))
+
+    flask_debug = (
+        os.getenv("FLASK_DEBUG", "False").lower()
+        in ("true", "1", "yes")
+    )
 
     print_startup_banner(str(flask_port), flask_env)
 
