@@ -80,6 +80,7 @@ function App() {
             <BrowserRouter>
           <PageTranslationHost />
           <Suspense fallback={<AppLoading />}>
+          <ErrorBoundary>
           <Routes>
             <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
             <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
@@ -109,6 +110,7 @@ function App() {
               <Route path="/document-upload" element={<DocumentUpload />} />
             </Route>
           </Routes>
+          </ErrorBoundary>
           </Suspense>
         </BrowserRouter>
             </LanguageProvider>

@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,7 +30,13 @@ if (!existsSync(indexPath)) {
 }
 
 for (const route of routes) {
-  const outputPath = join(distDir, route);
+  const routeDir = join(distDir, route);
+  const outputPath = join(routeDir, 'index.html');
+
+  if (existsSync(routeDir)) {
+    rmSync(routeDir, { recursive: true, force: true });
+  }
+
   mkdirSync(dirname(outputPath), { recursive: true });
   copyFileSync(indexPath, outputPath);
 }
