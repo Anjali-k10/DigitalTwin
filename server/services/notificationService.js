@@ -295,13 +295,13 @@ function buildEmailText(notification) {
 
   if (notification.suggestion) lines.push('', `Twin suggestion: ${notification.suggestion}`);
   if (notification.motivation) lines.push('', `Motivation: ${notification.motivation}`);
-  if (notification.actionLink) lines.push('', `Open in app: ${process.env.CLIENT_URL || 'http://localhost:5173'}${notification.actionLink}`);
+  if (notification.actionLink) lines.push('', `Open in app: ${process.env.FRONTEND_URL || 'http://localhost:5173'}${notification.actionLink}`);
 
   return lines.join('\n');
 }
 
 function buildEmailHtml(notification) {
-  const appUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const appUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   const actionUrl = notification.actionLink ? `${appUrl}${notification.actionLink}` : appUrl;
   const detail = notification.suggestion || notification.motivation || '';
 

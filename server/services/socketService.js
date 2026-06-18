@@ -7,7 +7,7 @@ export async function initializeSocketServer(httpServer) {
     const { Server } = await import('socket.io');
     const io = new Server(httpServer, {
       cors: {
-        origin: process.env.CLIENT_URL || 'http://localhost:5173',
+        origin: process.env.FRONTEND_URL || 'http://localhost:5173',
         credentials: true,
       },
     });
