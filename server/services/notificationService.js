@@ -1,5 +1,6 @@
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
+import { sendGmailWithAPI } from './gmailApiService.js';
 
 let socketServer = null;
 
@@ -174,91 +175,21 @@ async function sendEmailNotification(userId, notification) {
 
     console.log(`[Notifications] Sending email for "${notification.title}" to registered user email ${maskEmail(user.email)}`);
 
-    const result = await sendWithResend(user.email, notification);
-    const finalResult = result.sent ? result : await sendWithSmtp(user.email, notification);
+    await sendGmailWithAPI({
+      to: user.email,
+      subject: `[DigitalTwin] ${notification.title}`,
+      text: buildEmailText(notification),
+      html: buildEmailHtml(notification)
+    });
 
-    await markEmailResult(notification, finalResult.sent
-      ? { status: 'sent', provider: finalResult.provider }
-      : { status: 'failed', provider: finalResult.provider, error: finalResult.error });
+    await markEmailResult(notification, { status: 'sent', provider: 'gmail-api' });
   } catch (error) {
-    console.warn('Notification email skipped:', error.message);
+    console.warn('Notification email failed:', error.message);
     await markEmailResult(notification, {
       status: 'failed',
+      provider: 'gmail-api',
       error: error.message,
     });
-  }
-}
-
-async function sendWithResend(to, notification) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey || /your-|example|api-key/i.test(apiKey)) {
-    return { sent: false, provider: 'resend', error: 'RESEND_API_KEY is missing or placeholder.' };
-  }
-
-  try {
-    const { Resend } = await import('resend');
-    const resend = new Resend(apiKey);
-    const from = process.env.RESEND_FROM || process.env.SMTP_FROM || 'DigitalTwin <onboarding@resend.dev>';
-
-    const result = await resend.emails.send({
-      from,
-      to,
-      subject: `[DigitalTwin] ${notification.title}`,
-      text: buildEmailText(notification),
-      html: buildEmailHtml(notification),
-    });
-
-    if (result.error) {
-      console.warn('Resend notification email skipped:', result.error.message || result.error);
-      return { sent: false, provider: 'resend', error: result.error.message || String(result.error) };
-    }
-
-    console.log(`Notification email sent via Resend to ${maskEmail(to)}`);
-    return { sent: true, provider: 'resend' };
-  } catch (error) {
-    console.warn('Resend notification email skipped:', error.message);
-    return { sent: false, provider: 'resend', error: error.message };
-  }
-}
-
-async function sendWithSmtp(to, notification) {
-  const smtpPassword = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
-
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !smtpPassword) {
-    console.warn('SMTP notification email skipped: SMTP_HOST, SMTP_USER, or SMTP_PASS/SMTP_PASSWORD is missing.');
-    return { sent: false, provider: 'smtp', error: 'SMTP_HOST, SMTP_USER, or SMTP_PASS/SMTP_PASSWORD is missing.' };
-  }
-
-  if (isPlaceholderSmtpConfig(smtpPassword)) {
-    console.warn('SMTP notification email skipped: replace placeholder SMTP values in server/.env with real mail credentials.');
-    return { sent: false, provider: 'smtp', error: 'SMTP values are placeholders.' };
-  }
-
-  try {
-    const { default: nodemailer } = await import('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: normalizeSmtpPassword(smtpPassword),
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      to,
-      subject: `[DigitalTwin] ${notification.title}`,
-      text: buildEmailText(notification),
-      html: buildEmailHtml(notification),
-    });
-
-    console.log(`Notification email sent via SMTP to ${maskEmail(to)}`);
-    return { sent: true, provider: 'smtp' };
-  } catch (error) {
-    console.warn('SMTP notification email skipped:', error.message);
-    return { sent: false, provider: 'smtp', error: error.message };
   }
 }
 
@@ -268,16 +199,6 @@ async function markEmailResult(notification, result) {
   notification.emailError = result.error ? String(result.error).slice(0, 240) : '';
   if (result.status === 'sent') notification.emailedAt = new Date();
   await notification.save();
-}
-
-function isPlaceholderSmtpConfig(smtpPassword) {
-  return [process.env.SMTP_USER, smtpPassword].some((value) =>
-    /your-|example|app-password/i.test(String(value || '')),
-  );
-}
-
-function normalizeSmtpPassword(smtpPassword) {
-  return String(smtpPassword || '').replace(/\s+/g, '');
 }
 
 function maskEmail(email = '') {

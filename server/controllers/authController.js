@@ -662,57 +662,13 @@ async function sendPasswordResetOtpEmail(to, otp, heading = 'Reset your password
     </div>
   `;
 
-  const resendResult = await sendOtpWithResend(to, subject, text, html);
-  if (resendResult.sent) return resendResult;
-  return sendOtpWithSmtp(to, subject, text, html);
-}
-
-async function sendOtpWithResend(to, subject, text, html) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey || /your-|example|api-key/i.test(apiKey)) {
-    return { sent: false, provider: 'resend', error: 'RESEND_API_KEY missing or placeholder.' };
-  }
-
   try {
-    const { Resend } = await import('resend');
-    const resend = new Resend(apiKey);
-    const from = process.env.RESEND_FROM || process.env.SMTP_FROM || 'DigitalTwin <onboarding@resend.dev>';
-    const result = await resend.emails.send({ from, to, subject, text, html });
-    if (result.error) return { sent: false, provider: 'resend', error: result.error.message || String(result.error) };
-    return { sent: true, provider: 'resend' };
+    const { sendGmailWithAPI } = await import('../services/gmailApiService.js');
+    await sendGmailWithAPI({ to, subject, text, html });
+    return { sent: true, provider: 'gmail-api' };
   } catch (error) {
-    return { sent: false, provider: 'resend', error: error.message };
-  }
-}
-
-async function sendOtpWithSmtp(to, subject, text, html) {
-  const smtpPassword = process.env.SMTP_PASS || process.env.SMTP_PASSWORD;
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !smtpPassword) {
-    return { sent: false, provider: 'smtp', error: 'SMTP configuration missing.' };
-  }
-
-  try {
-    const { default: nodemailer } = await import('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: String(smtpPassword).replace(/\s+/g, ''),
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      to,
-      subject,
-      text,
-      html,
-    });
-    return { sent: true, provider: 'smtp' };
-  } catch (error) {
-    return { sent: false, provider: 'smtp', error: error.message };
+    console.error('OTP email failed:', error.message);
+    return { sent: false, provider: 'gmail-api', error: error.message };
   }
 }
 

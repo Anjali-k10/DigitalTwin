@@ -74,6 +74,83 @@ app.get('/api/server-health', (req, res) => {
 /**
  * Authentication & App Routes
  */
+app.get('/auth/google/start', (req, res) => {
+  const clientId = process.env.NOTIFICATION_MAIL_CLIENT_ID;
+  if (!clientId) {
+    return res.status(400).send('NOTIFICATION_MAIL_CLIENT_ID environment variable is missing.');
+  }
+  const redirectUri = req.protocol + '://' + req.get('host') + '/auth/google/callback';
+  const scope = 'https://mail.google.com/';
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+  return res.redirect(authUrl);
+});
+
+app.get('/auth/google/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) {
+    return res.status(400).send('Authorization code missing.');
+  }
+
+  try {
+    const { default: axios } = await import('axios');
+    const redirectUri = req.protocol + '://' + req.get('host') + '/auth/google/callback';
+    const response = await axios.post('https://oauth2.googleapis.com/token', {
+      code,
+      client_id: process.env.NOTIFICATION_MAIL_CLIENT_ID,
+      client_secret: process.env.NOTIFICATION_MAIL_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+    });
+
+    const { access_token, refresh_token } = response.data;
+
+    let refreshTestResult = 'Not tested';
+    if (refresh_token) {
+      try {
+        const refreshResponse = await axios.post('https://oauth2.googleapis.com/token', {
+          client_id: process.env.NOTIFICATION_MAIL_CLIENT_ID,
+          client_secret: process.env.NOTIFICATION_MAIL_CLIENT_SECRET,
+          refresh_token: refresh_token,
+          grant_type: 'refresh_token',
+        });
+        if (refreshResponse.data.access_token) {
+          refreshTestResult = '✅ Success! Verified that this refresh token works perfectly to generate access tokens.';
+        } else {
+          refreshTestResult = '⚠️ Warning: Exchange succeeded but refresh test returned unexpected response: ' + JSON.stringify(refreshResponse.data);
+        }
+      } catch (refreshError) {
+        refreshTestResult = '❌ Failed verification: ' + JSON.stringify(refreshError.response?.data || refreshError.message);
+      }
+    } else {
+      refreshTestResult = '⚠️ Warning: No refresh token returned. If you are re-authorizing, you must clear access in your Google Account Settings first or make sure prompt=consent is used.';
+    }
+
+    return res.send(`
+      <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 40px auto; padding: 24px; border: 1px solid #10c7a1; border-radius: 12px; background: #0b111a; color: #ffffff;">
+        <h2 style="color: #10c7a1; margin-top: 0;">OAuth2 Setup Success!</h2>
+        <p>Your Google Cloud application has successfully authorized access. Copy the refresh token below and add it to your <strong>Render Dashboard Environment Variables</strong>:</p>
+        <div style="background: #05070d; padding: 12px; border-radius: 8px; font-family: monospace; font-size: 16px; margin: 20px 0; word-break: break-all; border: 1px solid rgba(255,255,255,0.2);">
+          ${refresh_token || 'Access Token generated, but Refresh Token is missing. Make sure to go to the authorization link with access_type=offline and prompt=consent to get a refresh token.'}
+        </div>
+        
+        <div style="background: rgba(16, 199, 161, 0.1); border: 1px solid #10c7a1; padding: 12px; border-radius: 8px; margin: 20px 0;">
+          <strong>Refresh Token Test:</strong> ${refreshTestResult}
+        </div>
+
+        <p style="color: #fb923c; margin-bottom: 8px;"><strong>Render Variable details:</strong></p>
+        <ul style="margin-top: 0;">
+          <li><strong>Variable Name:</strong> <code>NOTIFICATION_MAIL_REFRESH_TOKEN</code></li>
+          <li><strong>Value:</strong> <em>(The token shown above)</em></li>
+        </ul>
+        <p style="font-size: 12px; color: #94a3b8; margin-bottom: 0;">You can close this tab after copying the token.</p>
+      </div>
+    `);
+  } catch (error) {
+    console.error('OAuth2 Exchange Error:', error.response?.data || error.message);
+    return res.status(500).send(`OAuth2 Exchange Failed: ${error.response?.data?.error_description || error.message}`);
+  }
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api', onboardingRoutes);
