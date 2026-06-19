@@ -234,6 +234,8 @@ function Onboarding() {
 
       // 3. Send to the full document extraction route. It supports resumes, PDFs, Word files, images, and statements.
       const response = await axios.post(`${API_BASE_URL}/api/ai/upload`, formData, {
+        timeout: 50000,
+        withCredentials: true,
         headers: { 
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
