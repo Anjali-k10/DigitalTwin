@@ -1138,162 +1138,7 @@ export default function Goals() {
           )}
         </AnimatePresence>
 
-        {/* ── PERSONALIZED MEAL PLANNER SECTION ── */}
-        <section className={`mb-10 rounded-[1.75rem] border p-6 sm:p-8 ${theme === 'light' ? 'border-slate-200 bg-white shadow-sm' : 'border-white/10 bg-[#080d15]/95 shadow-[0_24px_70px_-36px_rgba(0,0,0,0.85)]'}`}>
-          <div className={`flex items-center justify-between border-b pb-5 mb-6 ${theme === 'light' ? 'border-slate-200' : 'border-white/10'}`}>
-            <div className="flex items-center gap-3">
-              <div className="rounded-xl bg-gradient-to-br from-[#10c7a1] to-[#7b61ff] p-3 text-white">
-                <Utensils className="h-6 w-6" />
-              </div>
-              <div>
-                <h2 className={`text-2xl font-black ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>AI Personalized Meal Planner</h2>
-                <p className={`text-sm ${theme === 'light' ? 'text-slate-500' : 'text-white/50'}`}>Custom diet charts aligned with bio-metrics & conditions</p>
-              </div>
-            </div>
-            {!activePlan && (
-              <button onClick={() => { setIsPlanModalOpen(true); setModalStep(1); }}
-                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#10c7a1] to-[#7b61ff] px-4 py-2.5 text-xs font-bold text-white shadow-lg transition hover:scale-[1.02]">
-                <PlusCircle className="h-4 w-4" /> Create Meal Plan
-              </button>
-            )}
-          </div>
 
-          {/* AI Health Coach Banner */}
-          {coachAdvice && (
-            <div className="mb-6 rounded-2xl border border-[#7b61ff]/30 bg-[#7b61ff]/10 px-5 py-4 flex items-start gap-3.5">
-              <Brain className="h-5 w-5 text-[#c084fc] shrink-0 mt-0.5 animate-pulse" />
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-[#c084fc] mb-1">AI Health Coach</p>
-                <p className={`text-sm leading-relaxed ${theme === 'light' ? 'text-slate-700' : 'text-white/80'}`}>{coachAdvice}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Active Plan Dashboard metrics */}
-          {activePlan && (
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className={`rounded-2xl border p-4 flex items-center justify-between ${theme === 'light' ? 'border-slate-200 bg-slate-50/50 shadow-sm' : 'border-white/10 bg-[#0f1320]/40 shadow-[0_8px_32px_rgba(0,0,0,0.12)]'}`}>
-                <div>
-                  <p className={`text-[10px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-slate-500' : 'text-white/40'}`}>Adherence</p>
-                  <p className="text-2xl font-black text-[#10c7a1] mt-1">{activePlan.stats?.adherence ?? 0}%</p>
-                </div>
-                <div className="h-10 w-10 rounded-xl bg-[#10c7a1]/10 flex items-center justify-center text-white border border-[#10c7a1]/20">
-                  <Target className="h-5 w-5 text-[#10c7a1]" />
-                </div>
-              </div>
-              <div className={`rounded-2xl border p-4 flex items-center justify-between ${theme === 'light' ? 'border-slate-200 bg-slate-50/50 shadow-sm' : 'border-white/10 bg-[#0f1320]/40 shadow-[0_8px_32px_rgba(0,0,0,0.12)]'}`}>
-                <div>
-                  <p className={`text-[10px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-slate-500' : 'text-white/40'}`}>Days Remaining</p>
-                  <p className="text-2xl font-black text-[#7b61ff] mt-1">{activePlan.stats?.daysRemaining ?? 0}d</p>
-                </div>
-                <div className="h-10 w-10 rounded-xl bg-[#7b61ff]/10 flex items-center justify-center text-white border border-[#7b61ff]/20">
-                  <Clock className="h-5 w-5 text-[#7b61ff]" />
-                </div>
-              </div>
-              <div className={`rounded-2xl border p-4 flex items-center justify-between ${theme === 'light' ? 'border-slate-200 bg-slate-50/50 shadow-sm' : 'border-white/10 bg-[#0f1320]/40 shadow-[0_8px_32px_rgba(0,0,0,0.12)]'}`}>
-                <div>
-                  <p className={`text-[10px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-slate-500' : 'text-white/40'}`}>Current Streak</p>
-                  <p className="text-2xl font-black text-[#ff4d7d] mt-1">{activePlan.stats?.streak ?? 0} Days</p>
-                </div>
-                <div className="h-10 w-10 rounded-xl bg-[#ff4d7d]/10 flex items-center justify-center text-white border border-[#ff4d7d]/20">
-                  <Flame className="h-5 w-5 text-[#ff4d7d]" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Active Meal Plan Main Card */}
-          {activePlan ? (
-            <div className={`${glass} p-6 border-[#10c7a1]/25 relative overflow-hidden`}>
-              <div className="absolute top-0 right-0 rounded-bl-xl border-l border-b border-[#10c7a1]/25 bg-[#10c7a1]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#10c7a1]">
-                Active Plan
-              </div>
-              <div className="flex flex-col md:flex-row justify-between gap-6">
-                <div className="flex-1">
-                  <h3 className={`text-xl font-bold flex items-center gap-2 ${theme === 'light' ? 'text-slate-800' : 'text-white'}`}>
-                    <Apple className="h-5 w-5 text-[#10c7a1]" /> 
-                    {activePlan.category === 'Health Issue' ? `${activePlan.conditionOrGoal.join(' & ')} Plan` : activePlan.category === 'Pregnancy' ? `Pregnancy Diet (${activePlan.conditionOrGoal.join(', ')})` : `${activePlan.conditionOrGoal.join(', ')} Plan`}
-                  </h3>
-                  <p className={`text-xs mt-1 capitalize ${theme === 'light' ? 'text-slate-500' : 'text-white/50'}`}>Target Duration: {activePlan.duration} Days · Started {new Date(activePlan.startDate).toLocaleDateString()}</p>
-                  
-                  {/* Calorie & Protein Targets Summary */}
-                  {activePlan.mealPlan && (
-                    <div className="mt-3 flex gap-4 text-xs font-semibold">
-                      <span className="flex items-center gap-1 text-[#ffb38a]">
-                        <Flame className="h-3.5 w-3.5" /> 
-                        {activePlan.mealPlan.dailyCalories ?? 1600} kcal/day
-                      </span>
-                      <span className="flex items-center gap-1 text-[#7df3cc]">
-                        <Dumbbell className="h-3.5 w-3.5" /> 
-                        Protein: {activePlan.mealPlan.proteinTarget ?? '60g'}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Dual progress bars */}
-                  <div className="mt-5 space-y-4 max-w-md">
-                    <div>
-                      <div className={`flex justify-between text-xs mb-1 ${theme === 'light' ? 'text-slate-500' : 'text-white/60'}`}>
-                        <span>Dietary Adherence</span>
-                        <span className="font-bold text-[#10c7a1]">{activePlan.stats?.adherence ?? 0}%</span>
-                      </div>
-                      <div className={`h-2 w-full overflow-hidden rounded-full ${theme === 'light' ? 'bg-slate-100' : 'bg-white/5'}`}>
-                        <div className="h-full rounded-full bg-gradient-to-r from-[#10c7a1]/70 to-[#10c7a1]"
-                          style={{ width: `${activePlan.stats?.adherence ?? 0}%` }} />
-                      </div>
-                    </div>
-                    <div>
-                      <div className={`flex justify-between text-xs mb-1 ${theme === 'light' ? 'text-slate-500' : 'text-white/60'}`}>
-                        <span>Timeline Completion</span>
-                        <span className="font-bold text-[#7b61ff]">{activePlan.stats?.timelineCompletion ?? 0}%</span>
-                      </div>
-                      <div className={`h-2 w-full overflow-hidden rounded-full ${theme === 'light' ? 'bg-slate-100' : 'bg-white/5'}`}>
-                        <div className="h-full rounded-full bg-gradient-to-r from-[#7b61ff]/70 to-[#7b61ff]"
-                          style={{ width: `${activePlan.stats?.timelineCompletion ?? 0}%` }} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-col justify-end">
-                  <button onClick={() => setSelectedMealPlan(activePlan)}
-                    className={`w-full md:w-auto rounded-xl border px-5 py-3 text-xs font-bold transition text-center ${theme === 'light' ? 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200' : 'border-white/10 bg-white/5 text-white hover:bg-white/10'}`}>
-                    View Diet Details
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className={`py-10 text-center border border-dashed rounded-2xl ${theme === 'light' ? 'border-slate-250 bg-slate-50/50' : 'border-white/15'}`}>
-              <Apple className={`h-10 w-10 mx-auto mb-3 ${theme === 'light' ? 'text-slate-300' : 'text-white/20'}`} />
-              <p className={`text-sm ${theme === 'light' ? 'text-slate-500' : 'text-white/45'}`}>No active meal plan. Let Gemini build a custom meal plan for you.</p>
-              <button onClick={() => { setIsPlanModalOpen(true); setModalStep(1); }}
-                className="mt-3 inline-flex items-center gap-2 rounded-xl border border-[#10c7a1]/40 bg-[#10c7a1]/10 px-4 py-2 text-xs font-bold text-[#10c7a1] hover:bg-[#10c7a1]/20 transition">
-                Create New Plan
-              </button>
-            </div>
-          )}
-
-          {/* Past plans history */}
-          {pastPlans.length > 0 && (
-            <div className="mt-8">
-              <h3 className={`text-sm font-bold uppercase tracking-widest mb-3 ${theme === 'light' ? 'text-slate-500' : 'text-white/40'}`}>Past Meal Plans</h3>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {pastPlans.map((plan) => (
-                  <div key={plan._id} onClick={() => setSelectedMealPlan(plan)}
-                    className={`rounded-xl border p-4 flex justify-between items-center cursor-pointer transition ${theme === 'light' ? 'border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-350 shadow-sm' : 'border-white/5 bg-[#0f1320]/40 hover:border-white/15 hover:bg-white/[0.02]'}`}>
-                    <div>
-                      <p className={`text-sm font-bold ${theme === 'light' ? 'text-slate-750' : 'text-white/80'}`}>
-                        {plan.category === 'Health Issue' ? `${plan.conditionOrGoal.join(' & ')} Plan` : plan.category === 'Pregnancy' ? `Pregnancy Diet (${plan.conditionOrGoal.join(', ')})` : `${plan.conditionOrGoal.join(', ')} Plan`}
-                      </p>
-                      <p className={`text-[10px] mt-1 capitalize ${theme === 'light' ? 'text-slate-400' : 'text-white/30'}`}>{plan.duration} Days · Status: {plan.status} · Adherence: {plan.progress}%</p>
-                    </div>
-                    <ChevronRight className={`h-4 w-4 ${theme === 'light' ? 'text-slate-400' : 'text-white/30'}`} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
 
         {/* ── CREATE MEAL PLAN MODAL ── */}
         <AnimatePresence>
@@ -1748,6 +1593,155 @@ export default function Goals() {
             </motion.div>
           )}
         </div>
+
+        {/* ── PERSONALIZED MEAL PLANNER SECTION ── */}
+        <section className={`mt-10 mb-10 rounded-[1.75rem] border p-6 sm:p-8 ${theme === 'light' ? 'border-slate-200 bg-white shadow-sm' : 'border-white/10 bg-[#080d15]/95 shadow-[0_24px_70px_-36px_rgba(0,0,0,0.85)]'}`}>
+          <div className={`flex items-center justify-between border-b pb-5 mb-6 ${theme === 'light' ? 'border-slate-200' : 'border-white/10'}`}>
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-gradient-to-br from-[#10c7a1] to-[#7b61ff] p-3 text-white">
+                <Utensils className="h-6 w-6" />
+              </div>
+              <div>
+                <h2 className={`text-2xl font-black ${theme === 'light' ? 'text-slate-900' : 'text-white'}`}>AI Personalized Meal Planner</h2>
+                <p className={`text-sm ${theme === 'light' ? 'text-slate-500' : 'text-white/50'}`}>Custom diet charts aligned with bio-metrics & conditions</p>
+              </div>
+            </div>
+            {!activePlan && (
+              <button onClick={() => { setIsPlanModalOpen(true); setModalStep(1); }}
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#10c7a1] to-[#7b61ff] px-4 py-2.5 text-xs font-bold text-white shadow-lg transition hover:scale-[1.02]">
+                <PlusCircle className="h-4 w-4" /> Create Meal Plan
+              </button>
+            )}
+          </div>
+
+          {/* AI Health Coach Banner */}
+          {coachAdvice && (
+            <div className="mb-6 rounded-2xl border border-[#7b61ff]/30 bg-[#7b61ff]/10 px-5 py-4 flex items-start gap-3.5">
+              <Brain className="h-5 w-5 text-[#c084fc] shrink-0 mt-0.5 animate-pulse" />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-[#c084fc] mb-1">AI Health Coach</p>
+                <p className={`text-sm leading-relaxed ${theme === 'light' ? 'text-slate-700' : 'text-white/80'}`}>{coachAdvice}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Active Plan Dashboard metrics */}
+          {activePlan && (
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className={`rounded-2xl border p-4 flex items-center justify-between ${theme === 'light' ? 'border-slate-200 bg-slate-50/50 shadow-sm' : 'border-white/10 bg-[#0f1320]/40 shadow-[0_8px_32px_rgba(0,0,0,0.12)]'}`}>
+                <div>
+                  <p className={`text-[10px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-slate-500' : 'text-white/40'}`}>Adherence</p>
+                  <p className="text-2xl font-black text-[#10c7a1] mt-1">{activePlan.stats?.adherence ?? 0}%</p>
+                </div>
+                <div className="h-10 w-10 rounded-xl bg-[#10c7a1]/10 flex items-center justify-center text-white border border-[#10c7a1]/20">
+                  <Target className="h-5 w-5 text-[#10c7a1]" />
+                </div>
+              </div>
+              <div className={`rounded-2xl border p-4 flex items-center justify-between ${theme === 'light' ? 'border-slate-200 bg-slate-50/50 shadow-sm' : 'border-white/10 bg-[#0f1320]/40 shadow-[0_8px_32px_rgba(0,0,0,0.12)]'}`}>
+                <div>
+                  <p className={`text-[10px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-slate-500' : 'text-white/40'}`}>Days Remaining</p>
+                  <p className="text-2xl font-black text-[#7b61ff] mt-1">{activePlan.stats?.daysRemaining ?? 0}d</p>
+                </div>
+                <div className="h-10 w-10 rounded-xl bg-[#7b61ff]/10 flex items-center justify-center text-white border border-[#7b61ff]/20">
+                  <Clock className="h-5 w-5 text-[#7b61ff]" />
+                </div>
+              </div>
+              <div className={`rounded-2xl border p-4 flex items-center justify-between ${theme === 'light' ? 'border-slate-200 bg-slate-50/50 shadow-sm' : 'border-white/10 bg-[#0f1320]/40 shadow-[0_8px_32px_rgba(0,0,0,0.12)]'}`}>
+                <div>
+                  <p className={`text-[10px] font-bold uppercase tracking-widest ${theme === 'light' ? 'text-slate-500' : 'text-white/40'}`}>Current Streak</p>
+                  <p className="text-2xl font-black text-[#ff4d7d] mt-1">{activePlan.stats?.streak ?? 0} Days</p>
+                </div>
+                <div className="h-10 w-10 rounded-xl bg-[#ff4d7d]/10 flex items-center justify-center text-white border border-[#ff4d7d]/20">
+                  <Flame className="h-5 w-5 text-[#ff4d7d]" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Active Meal Plan Main Card */}
+          {activePlan ? (
+            <div className={`${glass} p-6 border-[#10c7a1]/25 relative overflow-hidden`}>
+              <div className="absolute top-0 right-0 rounded-bl-xl border-l border-b border-[#10c7a1]/25 bg-[#10c7a1]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#10c7a1]">
+                Active Plan
+              </div>
+              <div className="flex flex-col md:flex-row justify-between gap-6">
+                <div className="flex-1">
+                  <h3 className={`text-xl font-bold flex items-center gap-2 ${theme === 'light' ? 'text-slate-800' : 'text-white'}`}>
+                    <Apple className="h-5 w-5 text-[#10c7a1]" /> 
+                    {activePlan.category === 'Health Issue' ? `${activePlan.conditionOrGoal.join(' & ')} Plan` : activePlan.category === 'Pregnancy' ? `Pregnancy Diet (${activePlan.conditionOrGoal.join(', ')})` : `${activePlan.conditionOrGoal.join(', ')} Plan`}
+                  </h3>
+                  <p className={`text-xs mt-1 capitalize ${theme === 'light' ? 'text-slate-500' : 'text-white/50'}`}>Target Duration: {activePlan.duration} Days · Started {new Date(activePlan.startDate).toLocaleDateString()}</p>
+                  
+                  {/* Calorie & Protein Targets Summary */}
+                  {activePlan.mealPlan && (
+                    <div className="mt-3 flex gap-4 text-xs font-semibold">
+                      <span className="flex items-center gap-1 text-[#ffb38a]">
+                        <Flame className="h-3.5 w-3.5" /> 
+                        {activePlan.mealPlan.dailyCalories ?? 1600} kcal/day
+                      </span>
+                      <span className="flex items-center gap-1 text-[#7df3cc]">
+                        <Dumbbell className="h-3.5 w-3.5" /> 
+                        Protein: {activePlan.mealPlan.proteinTarget ?? '60g'}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Single progress bar */}
+                  <div className="mt-5 space-y-2 max-w-md">
+                    <div className="flex justify-between text-sm">
+                      <span className={theme === 'light' ? 'text-slate-500' : 'text-white/50'}>Dietary Adherence</span>
+                      <span className="font-bold text-[#10c7a1]">{activePlan.stats?.adherence ?? 0}%</span>
+                    </div>
+                    <div className={`h-2.5 w-full overflow-hidden rounded-full ${theme === 'light' ? 'bg-slate-100' : 'bg-white/8'}`}>
+                      <div className="h-full rounded-full bg-gradient-to-r from-[#10c7a1]/70 to-[#10c7a1]"
+                        style={{ width: `${activePlan.stats?.adherence ?? 0}%` }} />
+                    </div>
+                    <div className={`flex justify-between text-xs ${theme === 'light' ? 'text-slate-400' : 'text-white/40'}`}>
+                      <span>{activePlan.stats?.adherence ?? 0}% complete</span>
+                      <span>{100 - (activePlan.stats?.adherence ?? 0)}% remaining</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col justify-end">
+                  <button onClick={() => setSelectedMealPlan(activePlan)}
+                    className={`w-full md:w-auto rounded-xl border px-5 py-3 text-xs font-bold transition text-center ${theme === 'light' ? 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200' : 'border-white/10 bg-white/5 text-white hover:bg-white/10'}`}>
+                    View Diet Details
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className={`py-10 text-center border border-dashed rounded-2xl ${theme === 'light' ? 'border-slate-250 bg-slate-50/50' : 'border-white/15'}`}>
+              <Apple className={`h-10 w-10 mx-auto mb-3 ${theme === 'light' ? 'text-slate-300' : 'text-white/20'}`} />
+              <p className={`text-sm ${theme === 'light' ? 'text-slate-500' : 'text-white/45'}`}>No active meal plan. Let Gemini build a custom meal plan for you.</p>
+              <button onClick={() => { setIsPlanModalOpen(true); setModalStep(1); }}
+                className="mt-3 inline-flex items-center gap-2 rounded-xl border border-[#10c7a1]/40 bg-[#10c7a1]/10 px-4 py-2 text-xs font-bold text-[#10c7a1] hover:bg-[#10c7a1]/20 transition">
+                Create New Plan
+              </button>
+            </div>
+          )}
+
+          {/* Past plans history */}
+          {pastPlans.length > 0 && (
+            <div className="mt-8">
+              <h3 className={`text-sm font-bold uppercase tracking-widest mb-3 ${theme === 'light' ? 'text-slate-500' : 'text-white/40'}`}>Past Meal Plans</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {pastPlans.map((plan) => (
+                  <div key={plan._id} onClick={() => setSelectedMealPlan(plan)}
+                    className={`rounded-xl border p-4 flex justify-between items-center cursor-pointer transition ${theme === 'light' ? 'border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-350 shadow-sm' : 'border-white/5 bg-[#0f1320]/40 hover:border-white/15 hover:bg-white/[0.02]'}`}>
+                    <div>
+                      <p className={`text-sm font-bold ${theme === 'light' ? 'text-slate-750' : 'text-white/80'}`}>
+                        {plan.category === 'Health Issue' ? `${plan.conditionOrGoal.join(' & ')} Plan` : plan.category === 'Pregnancy' ? `Pregnancy Diet (${plan.conditionOrGoal.join(', ')})` : `${plan.conditionOrGoal.join(', ')} Plan`}
+                      </p>
+                      <p className={`text-[10px] mt-1 capitalize ${theme === 'light' ? 'text-slate-400' : 'text-white/30'}`}>{plan.duration} Days · Status: {plan.status} · Adherence: {plan.progress}%</p>
+                    </div>
+                    <ChevronRight className={`h-4 w-4 ${theme === 'light' ? 'text-slate-400' : 'text-white/30'}`} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
